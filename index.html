@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Race Engine — Coach Assistant</title>
+  <title>Points Race Live — Saisie course à points</title>
   <meta name="theme-color" content="#0a0a0a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Race Engine" />
-  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230a0a0a'/%3E%3Crect x='8' y='8' width='84' height='84' fill='none' stroke='%23dc2626' stroke-width='3'/%3E%3Ctext x='50' y='52' font-family='monospace' font-size='42' font-weight='bold' fill='%23dc2626' text-anchor='middle'%3E20%3C/text%3E%3C/svg%3E" />
+  <meta name="apple-mobile-web-app-title" content="Points Race Live" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230a0a0a'/%3E%3Crect x='8' y='8' width='84' height='84' fill='none' stroke='%23dc2626' stroke-width='3'/%3E%3Ctext x='50' y='62' font-family='monospace' font-size='44' font-weight='bold' fill='%23dc2626' text-anchor='middle'%3EP%3C/text%3E%3C/svg%3E" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -30,7 +30,7 @@
 const { useState, useMemo, useEffect, useRef } = React;
 
 // ============================================================
-// MOTEUR — Course à points
+// MOTEUR — Course à points  (logique conservée de la base validée)
 // ============================================================
 const CATEGORIES = ['Senior', 'Junior', 'Youth'];
 const DISCIPLINES = ['Piste', 'Route'];
@@ -73,12 +73,9 @@ function computeRanking(skaters, sprintResults, lapChanges) {
     if (!a.statusVoid && b.statusVoid) return -1;
     if (b.laps !== a.laps) return b.laps - a.laps;
     if (b.points !== a.points) return b.points - a.points;
-    // À égalité de points : le classement à l'ARRIVÉE prime.
     const aF = a.finishPosition ?? 9999, bF = b.finishPosition ?? 9999;
     if (aF !== bF) return aF - bF;
-    // Cas où aucun des deux n'a marqué/figuré à l'arrivée : on retombe sur le dernier point pris.
-    const aL = a.lastSprintPosition ?? 9999, bL = b.lastSprintPosition ?? 9999;
-    return aL - bL;
+    return (a.lastSprintPosition ?? 9999) - (b.lastSprintPosition ?? 9999);
   });
   return data.map((d, i) => ({ ...d, rank: i + 1 }));
 }
@@ -89,7 +86,7 @@ function computeTeamRanking(ranking) {
 }
 
 // ============================================================
-// SEARCH / ROLES / FLAGS
+// RECHERCHE / RÔLES / DRAPEAUX
 // ============================================================
 function normalize(s){return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');}
 function scoreMatch(s,nq){const n=normalize(s.name),c=normalize(s.club);if(n.startsWith(nq))return 100;if(n.includes(nq))return 50;if(c.startsWith(nq))return 25;if(c.includes(nq))return 10;return 0;}
@@ -103,7 +100,7 @@ const flag=(c)=>FLAG_MAP[(c||'').toUpperCase()]||'🏁';
 function clubColor(club){if(!club)return '#52525b';let h=0;for(let i=0;i<club.length;i++)h=club.charCodeAt(i)+((h<<5)-h);return `hsl(${Math.abs(h)%360},65%,55%)`;}
 function clubShort(club){if(!club)return '—';return club.split(/[-–]/)[0].trim().split(/\s+/).slice(0,2).join(' ');}
 
-// Identité athlète = nom normalisé (international). Profils futurs = même clé.
+// Identité athlète = nom normalisé (compatible international).
 function nameKey(s){return normalize(s.name);}
 function getRole(roles,s){return roles[nameKey(s)]||null;}
 const ROLE_ICON={mine:'⭐',primary:'🔴',secondary:'🟠'};
@@ -112,9 +109,9 @@ const ROLE_LABEL={mine:'Mes coureurs',primary:'Adversaires principaux',secondary
 function orderedCandidates(skaters, roles, pointsById, rankById, query, excludeIds){
   const avail=skaters.filter(s=>!excludeIds.includes(s.id));
   if(query)return searchSkaters(avail,query);
-  // 1) tous les marqueurs (pts>0) triés par classement provisoire réel — quel que soit le rôle
+  // 1) marqueurs (pts>0) triés par classement provisoire réel
   const scorers=avail.filter(s=>(pointsById[s.id]||0)>0).sort((a,b)=>((rankById[a.id]||9999)-(rankById[b.id]||9999))||((pointsById[b.id]||0)-(pointsById[a.id]||0)));
-  // 2) puis les non-marqueurs, groupés par rôle
+  // 2) non-marqueurs, groupés par rôle (coachés / adversaires prioritaires)
   const rest=avail.filter(s=>!((pointsById[s.id]||0)>0));
   const tM=[],tP=[],tS=[],tO=[];
   rest.forEach(s=>{const r=getRole(roles,s);if(r==='mine')tM.push(s);else if(r==='primary')tP.push(s);else if(r==='secondary')tS.push(s);else tO.push(s);});
@@ -124,7 +121,7 @@ function orderedCandidates(skaters, roles, pointsById, rankById, query, excludeI
 }
 
 // ============================================================
-// STARTING LIST PAR DÉFAUT (Coupe de France)
+// STARTING LIST DE DÉMO
 // ============================================================
 const DEFAULT_LIST=[
   {bib:464,name:'BEDDIAF Nolan',club:'MANAO - FR SKATE WORLD TEAM',nat:'FRA',cat:'Senior'},
@@ -170,158 +167,18 @@ const DEFAULT_LIST=[
 ].map((s,i)=>({id:i+1,...s,status:null}));
 
 // ============================================================
-// STORAGE + IMPORT
+// STOCKAGE LOCAL (namespace 'prl_' — isolé de toute autre app) + EXPORTS
 // ============================================================
 const LS={get(k,fb){try{const v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch{return fb;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
-function downloadJSON(filename,obj){
+function downloadFile(filename,content,mime){
   try{
-    const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+    const blob=new Blob([content],{type:mime});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1500);
   }catch(e){alert('Export impossible: '+e.message);}
 }
-// Mémoire canonique : convertit le live (points/tours/statuts) en log d'événements typés.
-function buildEventLog(roster, race){
-  const st=buildRaceConfig(race.config||defaultPointsConfig());
-  const spById={};st.sprints.forEach(sp=>spById[sp.id]=sp);
-  const byId={};roster.forEach(s=>byId[s.id]=s);
-  const k=(id)=>byId[id]?nameKey(byId[id]):null;
-  const log=[];let seq=1;
-  [...(race.live?.sprintResults||[])].sort((a,b)=>a.sprintId-b.sprintId).forEach(sp=>{
-    const meta=spById[sp.sprintId]||{};const isFinal=!!meta.isFinal;
-    log.push({id:`pt-${sp.sprintId}`,seq:seq++,type:isFinal?'ARRIVEE':'POINT',source:'live',videoTime:null,
-      point:meta.label||String(sp.sprintId),
-      positions:sp.positions.map((id,idx)=>({rank:idx+1,athleteKey:k(id),bib:(byId[id]||{}).bib,name:(byId[id]||{}).name,pts:pointsForPosition(idx+1,isFinal)}))});
-  });
-  Object.entries(race.live?.lapChanges||{}).forEach(([id,v])=>{if(!v)return;const s=byId[id];if(!s)return;log.push({id:`lap-${id}`,seq:seq++,type:v>0?'LAP_GAIN':'LAP_LOSS',source:'live',videoTime:null,athleteKey:nameKey(s),bib:s.bib,name:s.name,value:v});});
-  roster.forEach(s=>{if(s.status){log.push({id:`st-${s.id}`,seq:seq++,type:s.status,source:'live',videoTime:null,athleteKey:nameKey(s),bib:s.bib,name:s.name});}});
-  // événements tactiques déjà présents (séquenceur futur) : on les conserve
-  (race.log||[]).filter(e=>e.source&&e.source!=='live').forEach(e=>log.push({...e,seq:seq++}));
-  return log;
-}
-// Base athlètes dérivée (union des rosters par clé nom).
-function buildAthleteBase(events){
-  const base={};
-  events.forEach(ev=>(ev.roster||[]).forEach(s=>{
-    const key=nameKey(s);if(!key)return;
-    if(!base[key])base[key]={key,name:s.name,nat:s.nat||'FRA',clubs:[]};
-    base[key].nat=s.nat||base[key].nat;
-    if(s.club&&!base[key].clubs.includes(s.club))base[key].clubs.push(s.club);
-  }));
-  return base;
-}
 
-// ============================================================
-// Vue dérivée des points live, liés au tour (structurel) et au temps vidéo (depuis race.laps).
-// Résout les points effectifs en fusionnant les sources : live > correction > vidéo.
-function resolvePoints(roster, race, structure){
-  const byId={};roster.forEach(s=>byId[s.id]=s);
-  const byKey={};roster.forEach(s=>{byKey[nameKey(s)]=s;});
-  const corr={},vid={};
-  (race.log||[]).forEach(e=>{if(e.type==='POINT_CORRECTION')corr[e.sprintId]=e;else if(e.type==='POINT'&&e.source==='sequencer')vid[e.sprintId]=e;});
-  const mapKeyPos=(arr,isFinal)=>(arr||[]).map((p,idx)=>{const sk=byKey[p.athleteKey]||{};return {rank:p.rank||idx+1,athleteKey:p.athleteKey,id:sk.id,bib:sk.bib,name:sk.name,value:pointsForPosition(p.rank||idx+1,isFinal)};});
-  const out={};
-  structure.sprints.forEach(sp=>{
-    const liveRes=(race.live?.sprintResults||[]).find(r=>r.sprintId===sp.id);
-    const livePos=liveRes?liveRes.positions.map((id,idx)=>({rank:idx+1,id,athleteKey:byId[id]?nameKey(byId[id]):null,bib:(byId[id]||{}).bib,name:(byId[id]||{}).name,value:pointsForPosition(idx+1,sp.isFinal)})):null;
-    let positions=null,provenance=null,isCorrection=false,original=null;
-    if(corr[sp.id]){positions=mapKeyPos(corr[sp.id].positions,sp.isFinal);provenance='sequencer';isCorrection=true;original=livePos;}
-    else if(livePos){positions=livePos;provenance='live';}
-    else if(vid[sp.id]){positions=mapKeyPos(vid[sp.id].positions,sp.isFinal);provenance='sequencer';}
-    if(positions&&positions.length)out[sp.id]={positions,provenance,isCorrection,original};
-  });
-  return out;
-}
-// Pour computeRanking : positions (ids) par sprint, sources fusionnées.
-function effectiveSprintResults(roster, race, structure){
-  const resolved=resolvePoints(roster,race,structure);
-  return structure.sprints.filter(sp=>resolved[sp.id]).map(sp=>({sprintId:sp.id,isFinal:!!sp.isFinal,positions:resolved[sp.id].positions.map(p=>p.id).filter(x=>x!=null)}));
-}
-function effectiveMode(race){return (race.origin&&race.origin!=='auto')?race.origin:((race.live?.sprintResults||[]).length?'live':'video');}
-
-// Vue dérivée des points (export + lecture) : fusion + tour + vidéo + contexte par attribution.
-function buildPoints(roster, race, structure){
-  const resolved=resolvePoints(roster,race,structure);
-  const cumByLap={},lapTimeByLap={};(race.laps||[]).forEach(l=>{cumByLap[l.lap]=l.cumTime;lapTimeByLap[l.lap]=l.lapTime;});
-  const ctx={};(race.log||[]).filter(e=>e.type==='POINT_CONTEXT'&&e.ref).forEach(e=>{ctx[e.ref.sprintId+'|'+e.ref.athleteKey]=e.tags||{};});
-  const neutralized=structure.neutralizedLaps,freq=structure.frequency;
-  const pts=[];
-  structure.sprints.forEach((sp,index)=>{
-    const r=resolved[sp.id];if(!r)return;
-    const lap=neutralized+index*freq;
-    pts.push({sprintId:sp.id,label:sp.label,index,isFinal:!!sp.isFinal,lap,
-      videoTime:cumByLap[lap]!=null?cumByLap[lap]:null,lapTime:lapTimeByLap[lap]!=null?lapTimeByLap[lap]:null,
-      provenance:r.provenance,isCorrection:r.isCorrection,original:r.original,
-      positions:r.positions.map(p=>({...p,context:p.athleteKey?(ctx[sp.id+'|'+p.athleteKey]||null):null}))});
-  });
-  return pts;
-}
-
-// extractFeatures(log, athleteKey, pointOrder)
-// Moteur de features tactiques. Fonctionne sur un log COMPLET ou PARTIEL
-// (donc utilisable hors-ligne pour les profils ET en live pour l'assistant).
-// Cette version exploite les features LIBRES (dérivées du log de points) :
-//   F1 = phase de marquage · F5 = état virtuel (rang/écart au moment des points) · F8 = arrivée.
-// Les emplacements TAG (F2,F3,F4,F6,F7) sont réservés pour le futur séquenceur.
-// pointOrder = [{label, isFinal}] dans l'ordre de course (depuis structure.sprints).
-// ============================================================
-function extractFeatures(log, athleteKey, pointOrder){
-  const scoring=(log||[]).filter(e=>e.type==='POINT'||e.type==='ARRIVEE').slice().sort((a,b)=>(a.seq||0)-(b.seq||0));
-  if(!scoring.length)return null;
-  // mapping phase par libellé de point
-  const nonFinal=(pointOrder||[]).filter(p=>!p.isFinal);
-  const nf=nonFinal.length||1;
-  const phaseOfLabel={};
-  nonFinal.forEach((p,i)=>{phaseOfLabel[p.label]= i<nf/3?'debut': i<2*nf/3?'milieu':'fin';});
-  const phaseOfEvent=(e)=> (e.type==='ARRIVEE')?'arrivee':(phaseOfLabel[e.point]||'milieu');
-
-  const cum={};let total=0;
-  const moments=[];const phasePts={debut:0,milieu:0,fin:0,arrivee:0};
-  let finish={scored:false,rank:null,pts:0};
-  scoring.forEach(e=>{
-    (e.positions||[]).forEach(p=>{if(p.athleteKey)cum[p.athleteKey]=(cum[p.athleteKey]||0)+(p.pts||0);});
-    const mine=(e.positions||[]).find(p=>p.athleteKey===athleteKey);
-    if(mine){
-      const pts=mine.pts||0;total+=pts;
-      const ph=phaseOfEvent(e);phasePts[ph]+=pts;
-      const sorted=Object.entries(cum).sort((a,b)=>b[1]-a[1]);
-      const rank=sorted.findIndex(([k])=>k===athleteKey)+1;
-      const leaderPts=sorted.length?sorted[0][1]:0;
-      const gap=leaderPts-(cum[athleteKey]||0);
-      moments.push({phase:ph,pts,rank,gap});
-      if(e.type==='ARRIVEE')finish={scored:true,rank:mine.rank,pts};
-    }
-  });
-  if(total===0)return null;
-  const share=(x)=>+(x/total).toFixed(3);
-  const F1={debut:share(phasePts.debut),milieu:share(phasePts.milieu),fin:share(phasePts.fin),arrivee:share(phasePts.arrivee)};
-  const avg=(f)=>moments.length?+(moments.reduce((s,m)=>s+f(m),0)/moments.length).toFixed(2):null;
-  const leading=moments.filter(m=>m.rank===1||m.gap<=0).length;
-  const F5={
-    avgRank:avg(m=>m.rank),
-    avgGap:avg(m=>m.gap),
-    scoredLeadingShare:moments.length?+(leading/moments.length).toFixed(2):0,
-    phaseTypique:Object.entries(F1).sort((a,b)=>b[1]-a[1])[0][0]
-  };
-  const labels=[];
-  if(F1.debut>=0.45)labels.push('scoreur_precoce');
-  if((F1.fin+F1.arrivee)>=0.55)labels.push('scoreur_tardif');
-  if(F5.scoredLeadingShare>=0.6)labels.push('controleur');
-  return {
-    athleteKey, totalPoints:total, scoringEvents:moments.length,
-    F1_phase:F1, F5_trigger:F5, F8_finish:finish,
-    // emplacements TAG — à remplir par le séquenceur (Partie 4 de la colonne vertébrale)
-    F2_position:null, F3_sprint:null, F4_attack:null, F6_work:null, F7_efficiency:null,
-    labels
-  };
-}
-async function importViaApi({imageData,mediaType,pdfData,text}){
-  const res=await fetch('/api/extract',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageData,mediaType,pdfData,text})});
-  let data; try{data=await res.json();}catch{throw new Error("Import : nécessite la fonction serveur (étape 2). La saisie manuelle marche.");}
-  if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);
-  return data.skaters||[];
-}
 // fusionne plusieurs lots en dédoublonnant par dossard ; renumérote les id
 function mergeRosters(batches){
   const byBib=new Map();
@@ -330,16 +187,13 @@ function mergeRosters(batches){
 }
 
 // PARSEUR LOCAL GÉNÉRIQUE (sans IA) — FFRS, Europe, World Skate, OCR, copier-coller.
-// Stratégie : colonnes d'abord (tab / 2+ espaces), sinon mode "loose".
 const COUNTRY_NAMES={france:'FRA',espagne:'ESP',spain:'ESP',espana:'ESP',italie:'ITA',italy:'ITA',italia:'ITA',allemagne:'GER',germany:'GER',deutschland:'GER',belgique:'BEL',belgium:'BEL',belgie:'BEL',paysbas:'NED',netherlands:'NED',nederland:'NED',portugal:'POR',suisse:'SUI',switzerland:'SUI',schweiz:'SUI',colombie:'COL',colombia:'COL',bresil:'BRA',brazil:'BRA',brasil:'BRA',coree:'KOR',korea:'KOR',japon:'JPN',japan:'JPN',chine:'CHN',china:'CHN',taiwan:'TPE',taipei:'TPE',usa:'USA',etatsunis:'USA',argentine:'ARG',argentina:'ARG',mexique:'MEX',mexico:'MEX',chili:'CHI',chile:'CHI',equateur:'ECU',ecuador:'ECU',venezuela:'VEN',australie:'AUS',australia:'AUS',pologne:'POL',poland:'POL',danemark:'DEN',denmark:'DEN'};
-// Codes pays ISO/IOC 3 lettres (large, international) — pour isoler la nationalité.
 const NAT_CODES=new Set(('FRA ESP ITA GER BEL NED POR SUI GBR IRL USA CAN MEX COL CHI ARG BRA ECU VEN PER PAR URU BOL GUA CRC ESA HON NCA PAN DOM PUR CUB KOR PRK JPN CHN TPE HKG SGP MAS THA INA IND PHI VIE AUS NZL CZE SVK POL AUT HUN SLO CRO SRB DEN SWE NOR FIN EST LAT LTU RUS UKR BLR TUR GRE ROU BUL ISR KAZ RSA NAM EGY MAR ALG TUN ANG KEN COD CIV').split(/\s+/));
 const isNat=(t)=>{const u=(t||'').toUpperCase();return /^[A-Z]{3}$/.test(u)&&NAT_CODES.has(u);};
 const CAT_PREFIX=/\b((SE|JU|VE|CA|MI|BE|PO|DA)[HFG])\b/i;
 const CAT_WORD=/\b(seniors?|sen|juniors?|jun|cadets?|minimes?|espoirs?|veterans?|vet|masters?|youth|u1[0-9]|u2[0-9])\b/i;
 function catNorm(w){w=(w||'').toLowerCase();if(/^(se|sen|senior)/.test(w))return 'Senior';if(/^(ju|jun|junior)/.test(w))return 'Junior';if(/^(ve|vet|master)/.test(w))return 'Veteran';if(/(cadet|minime|youth|^ca|^mi|^be|^po|u1|u2|espoir)/.test(w))return 'Youth';return 'Senior';}
 function parseLocalRoster(text){
-  const NATS=Object.keys(FLAG_MAP);
   const out=[];
   text.split(/\r?\n/).forEach(line=>{
     let raw=(line||'').replace(/\u00a0/g,' ').replace(/\t/g,'  ').trim();
@@ -361,7 +215,7 @@ function parseLocalRoster(text){
         if(/^\d{1,3}$/.test(f))return false;         // rang / ordre
         if(/^\d{2}-\d{2}$/.test(f))return false;     // ligue
         if(/^\d+[:.]\d/.test(f))return false;        // temps
-        if(f.split(/\s+/).length===1&&grabNat(f))return false; // nationalité seule
+        if(f.split(/\s+/).length===1&&grabNat(f))return false;
         if(f.split(/\s+/).length===1&&CAT_WORD.test(f)){cat=catNorm(f);return false;}
         return true;
       }).map(f=>{const m=f.match(CAT_PREFIX);if(m){cat=catNorm(m[1]);return f.replace(CAT_PREFIX,'').replace(/^[-\s]+/,'').trim();}return f;}).filter(Boolean);
@@ -376,29 +230,24 @@ function parseLocalRoster(text){
       let rest=raw.replace(bibM[0],' ').replace(/\b\d{5,}\b/g,' ').replace(/\b\d{2}-\d{2}\b/g,' ').replace(/\b\d+[:.]\d+\b/g,' ').replace(/\s{2,}/g,' ').trim();
       let toks=rest.split(/\s+/).filter(Boolean);
       let name='',club='';
-      // 1) code pays ISO 3 lettres = séparateur nom / club (gère les noms composés)
       const natIdx=toks.findIndex(t=>isNat(t));
       if(natIdx>=0){
         nat=toks[natIdx].toUpperCase();
         name=toks.slice(0,natIdx).join(' ').trim();
         club=toks.slice(natIdx+1).join(' ').trim();
       }else{
-        // 2) nom de pays en toutes lettres comme séparateur
         let cnIdx=-1,cnCode=null;
         for(let i=0;i<toks.length;i++){const fl=toks[i].toLowerCase().replace(/[^a-z]/g,'');if(COUNTRY_NAMES[fl]){cnIdx=i;cnCode=COUNTRY_NAMES[fl];break;}}
         if(cnIdx>=0){nat=cnCode;name=toks.slice(0,cnIdx).join(' ').trim();club=toks.slice(cnIdx+1).join(' ').trim();}
         else{
-          // 3) préfixe catégorie FFRS (SEH/JUH/VEH…) = début du club
           const cm=rest.match(CAT_PREFIX);
           if(cm){cat=catNorm(cm[1]);name=rest.slice(0,cm.index).trim();club=rest.slice(cm.index+cm[1].length).replace(/^[-\s]+/,'').trim();}
           else{
-            // 4) défaut : nom = 2 premiers tokens, club = reste
             let r2=rest.replace(/\s+\d{1,3}\s*$/,'').replace(/\s{2,}/g,' ').trim();const t2=r2.split(/\s+/).filter(Boolean);
             if(t2.length<=2)name=t2.join(' ');else{name=t2.slice(0,2).join(' ');club=t2.slice(2).join(' ');}
           }
         }
       }
-      // catégorie éventuelle dans le club / nettoyage ordre final
       const cw=club.match(CAT_PREFIX)||club.match(CAT_WORD);
       if(cw){cat=catNorm(cw[1]||cw[0]);club=club.replace(CAT_PREFIX,'').replace(CAT_WORD,'').replace(/^[-\s]+/,'').trim();}
       club=club.replace(/\s+\d{1,3}\s*$/,'').replace(/\s{2,}/g,' ').trim();
@@ -409,39 +258,15 @@ function parseLocalRoster(text){
 }
 
 // ============================================================
-// REGISTRE DE MODULES (épreuves)
-// Chaque module = même base coureurs/rôles, moteur propre.
+// REGISTRE DE MODULES (épreuves) — points race opérationnel, autres en attente
 // ============================================================
 const MODULES=[
   {id:'points', label:'Course à points', icon:'🏁', operational:true},
-  {id:'1000m', label:'1000 m', icon:'⏱', operational:false},
-  {id:'elimination', label:'Élimination', icon:'❌', operational:false},
-  {id:'500m', label:'500 m', icon:'⚡', operational:false},
 ];
 const moduleLabel=(id)=>(MODULES.find(m=>m.id===id)||{}).label||id;
-const APP_VERSION='v25';
+const APP_VERSION='PRL v1.1';
 const SCHEMA_VERSION=1;
-// Taxonomie des événements (figée — voir ARCHITECTURE-DONNEES.md). Extensible sans rupture.
-const EVENT_TYPES={
-  auto:['POINT','ARRIVEE','LAP_GAIN','LAP_LOSS','DNF','DSQ','PENALTY'],
-  // CONTRE n'est pas un type : c'est une ATTAQUE avec tag SUR_CONTRE
-  tactical:['SPRINT','ATTAQUE','ECHAPPEE','RETOUR','PLACEMENT','RELAIS','BLOCAGE','CHUTE','ACCELERATION','RALENTISSEMENT','EFFORT_FAIBLE','EFFORT_MOYEN','EFFORT_FORT','NOTE']
-};
-const EVENT_TAGS=['EN_TETE','DANS_LA_ROUE','OPPORTUNISTE','LANCE_DE_LOIN','SPRINT_LONG','SPRINT_COURT','SORTIE_VIRAGE','ASPIRATION','SUR_CONTRE','DEPUIS_ECHAPPEE'];
-const EVENT_PARTS=['INITIATEUR','SUIVEUR','RAMENEUR','LANCEUR','BENEFICIAIRE'];
-// 5 moves tactiques validés : [id, label, needsTarget]
-const SEQ_MOVES=[['attaque','Attaque',false],['suit_marque','Suit / Marque',true],['mene_ramene','Mène / Ramène',false],['temporise','Temporise',false],['aide_coequipier','Aide coéquipier',true]];
-const MOVE_OUTCOMES=[['reussie','Réussie'],['reprise','Reprise'],['sans_effet','Sans effet']];
-// Vocabulaire des tags d'enrichissement d'une prise de point (par attribution)
-const TAG_VOCAB={
-  context:[['sprint_peloton','Sprint peloton'],['echappee_2','Échappée 2'],['echappee_3','Échappée 3'],['echappee_4plus','Échappée 4+']],
-  positionBefore:[['1','P1'],['2','P2'],['3','P3'],['4','P4'],['5','P5'],['6','P6+']],
-  cost:[['1','1'],['2','2'],['3','3'],['4','4'],['5','5']]
-};
-const moveLabel=(id)=>(SEQ_MOVES.find(m=>m[0]===id)||[id,id])[1];
-const EVENT_GROUPS=['tete','echappee','contre','peloton','chasse','queue','decroche'];
 
-// ----- Événements & courses : factories + migration -----
 const rid=()=>Math.random().toString(36).slice(2,9);
 const today=()=>new Date().toISOString().slice(0,10);
 const defaultPointsConfig=()=>({category:'Senior',discipline:'Piste',circuitLength:200,totalDistance:5000});
@@ -449,26 +274,13 @@ function defaultRaceLabel(module,cfg){
   if(module==='points')return `${(cfg&&cfg.totalDistance/1000)||5} km Points`;
   return moduleLabel(module);
 }
-function makeRace(module,label,cfg){const config=module==='points'?(cfg||defaultPointsConfig()):{};return {id:rid(),module,label:label||defaultRaceLabel(module,config),config,origin:'auto',live:{sprintResults:[],lapChanges:{}},laps:[],log:[]};}
+function makeRace(module,label,cfg){const config=module==='points'?(cfg||defaultPointsConfig()):{};return {id:rid(),module,label:label||defaultRaceLabel(module,config),config,live:{sprintResults:[],lapChanges:{}}};}
 function makeEvent(name){return {id:rid(),name:name||'Nouvel événement',date:today(),location:'',roster:DEFAULT_LIST,roles:{},races:[makeRace('points','5 km Points Senior H')]};}
 
-function migrateOrSeed(){
-  const ev=LS.get('events',null);
+function loadEvents(){
+  const ev=LS.get('prl_events',null);
   if(ev&&ev.length)return ev;
-  const events=[];
-  // 1) anciennes courses sauvegardées → événements
-  (LS.get('savedRaces',[])||[]).forEach(s=>{
-    const cfg={category:s.meta?.category||'Senior',discipline:s.meta?.discipline||'Piste',circuitLength:s.meta?.circuitLength||200,totalDistance:s.meta?.totalDistance||5000};
-    events.push({id:rid(),name:s.meta?.competition||'Course sauvegardée',date:s.meta?.date||today(),location:'',roster:s.roster||DEFAULT_LIST,roles:s.roles||{},
-      races:[{id:rid(),module:s.meta?.module||'points',label:`${defaultRaceLabel(s.meta?.module||'points',cfg)}`,config:cfg,live:s.live||{sprintResults:[],lapChanges:{}}}]});
-  });
-  // 2) état courant à plat → événement actif
-  const cfg={category:LS.get('cfg_cat','Senior'),discipline:LS.get('cfg_disc','Piste'),circuitLength:LS.get('cfg_circ',200),totalDistance:LS.get('cfg_dist',5000)};
-  const meta=LS.get('meta',{});
-  events.unshift({id:rid(),name:meta.competition||'Événement actuel',date:meta.date||today(),location:'',
-    roster:LS.get('skaters',DEFAULT_LIST),roles:LS.get('roles',{}),
-    races:[{id:rid(),module:'points',label:defaultRaceLabel('points',cfg),config:cfg,live:{sprintResults:LS.get('sprintResults',[]),lapChanges:LS.get('lapChanges',{})}}]});
-  return events;
+  return [makeEvent('Événement de démo')];
 }
 
 // ============================================================
@@ -476,9 +288,9 @@ function migrateOrSeed(){
 // ============================================================
 function App(){
   const [tab,setTab]=useState('saisie'); // event | coureurs | saisie | classement
-  const [events,setEvents]=useState(()=>migrateOrSeed());
-  const [activeEventId,setActiveEventId]=useState(()=>LS.get('activeEventId',null));
-  const [activeRaceId,setActiveRaceId]=useState(()=>LS.get('activeRaceId',null));
+  const [events,setEvents]=useState(()=>loadEvents());
+  const [activeEventId,setActiveEventId]=useState(()=>LS.get('prl_activeEventId',null));
+  const [activeRaceId,setActiveRaceId]=useState(()=>LS.get('prl_activeRaceId',null));
   const [activeSprintIdx,setActiveSprintIdx]=useState(0);
   const [showImport,setShowImport]=useState(false);
   const [showSwitcher,setShowSwitcher]=useState(false);
@@ -487,25 +299,22 @@ function App(){
   const toastTimer=useRef(null);
   const showToast=(msg,type)=>{setToast({msg,type});if(toastTimer.current)clearTimeout(toastTimer.current);toastTimer.current=setTimeout(()=>setToast(null),2800);};
 
-  // événement / course actifs (avec garde si id invalide)
   const event=events.find(e=>e.id===activeEventId)||events[0];
   const race=(event.races.find(r=>r.id===activeRaceId))||event.races[0];
 
   useEffect(()=>{if(event&&event.id!==activeEventId)setActiveEventId(event.id);},[event,activeEventId]);
   useEffect(()=>{if(race&&race.id!==activeRaceId)setActiveRaceId(race.id);},[race,activeRaceId]);
-  useEffect(()=>LS.set('events',events),[events]);
-  useEffect(()=>LS.set('activeEventId',activeEventId),[activeEventId]);
-  useEffect(()=>LS.set('activeRaceId',activeRaceId),[activeRaceId]);
+  useEffect(()=>LS.set('prl_events',events),[events]);
+  useEffect(()=>LS.set('prl_activeEventId',activeEventId),[activeEventId]);
+  useEffect(()=>LS.set('prl_activeRaceId',activeRaceId),[activeRaceId]);
 
-  // working set dérivé de l'arbre
   const skaters=event.roster;
   const roles=event.roles;
   const config=race.config||defaultPointsConfig();
-  const liveSprint=race.live?.sprintResults||[];     // saisie live (édition)
+  const liveSprint=race.live?.sprintResults||[];
   const lapChanges=race.live?.lapChanges||{};
   const mod=MODULES.find(m=>m.id===race.module)||MODULES[0];
 
-  // mutations (écrivent dans l'arbre)
   const patchEvent=(fn)=>setEvents(prev=>prev.map(e=>e.id===event.id?fn(e):e));
   const patchRace=(fn)=>patchEvent(e=>({...e,races:e.races.map(r=>r.id===race.id?fn(r):r)}));
   const patchConfig=(patch)=>patchRace(r=>({...r,config:{...r.config,...patch}}));
@@ -521,7 +330,7 @@ function App(){
   const updateSprint=(sprintId,isFinal,positions)=>{
     const filled=positions.filter(Boolean).map(Number);
     patchRace(r=>{const without=r.live.sprintResults.filter(s=>s.sprintId!==sprintId);const next=filled.length===0?without:[...without,{sprintId,isFinal,positions:filled}];return {...r,live:{...r.live,sprintResults:next}};});
-    if(filled.length>=(isFinal?3:2))setLastSprintId(sprintId);
+    if(filled.length===(isFinal?3:2))setLastSprintId(sprintId);
   };
   const setLap=(id,v)=>{patchRace(r=>({...r,live:{...r.live,lapChanges:{...r.live.lapChanges,[id]:v}}}));const sk=skaters.find(s=>s.id===id);if(sk){if(v===1)showToast(`+1 TOUR · ${sk.bib} ${sk.name}`,'gain');else if(v===-1)showToast(`LAPPÉ · ${sk.bib} ${sk.name} — points annulés`,'loss');}};
   const setStatus=(id,st)=>{setRoster(rs=>rs.map(s=>s.id===id?{...s,status:s.status===st?null:st}:s));const sk=skaters.find(s=>s.id===id);if(sk&&sk.status!==st)showToast(`${st} · ${sk.bib} ${sk.name}`,'loss');};
@@ -529,7 +338,6 @@ function App(){
   const assignRoleClub=(club,role)=>patchEvent(e=>{const c={...e.roles};const mem=e.roster.filter(s=>s.club===club);const allIn=mem.every(s=>c[nameKey(s)]===role);mem.forEach(s=>{const k=nameKey(s);if(allIn)delete c[k];else c[k]=role;});return {...e,roles:c};});
   const importSkaters=(list)=>{setSkaters(list);resetRace();setShowImport(false);showToast(`${list.length} coureurs importés`,'gain');};
 
-  // gestion événements / courses
   const createEvent=()=>{const ev=makeEvent(`Événement ${events.length+1}`);setEvents(prev=>[ev,...prev]);setActiveEventId(ev.id);setActiveRaceId(ev.races[0].id);setTab('event');};
   const updateEventMeta=(patch)=>patchEvent(e=>({...e,...patch}));
   const deleteEvent=(id)=>setEvents(prev=>{const next=prev.filter(e=>e.id!==id);return next.length?next:[makeEvent('Événement 1')];});
@@ -541,34 +349,26 @@ function App(){
   const duplicateRace=(id)=>patchEvent(e=>{const r=e.races.find(x=>x.id===id);if(!r)return e;const copy={...r,id:rid(),label:r.label+' (copie)',live:{sprintResults:[...(r.live?.sprintResults||[])],lapChanges:{...(r.live?.lapChanges||{})}}};return {...e,races:[...e.races,copy]};});
   const duplicateEvent=(id)=>setEvents(prev=>{const e=prev.find(x=>x.id===id);if(!e)return prev;const copy=JSON.parse(JSON.stringify(e));copy.id=rid();copy.name=e.name+' (copie)';copy.races=copy.races.map(r=>({...r,id:rid()}));return [copy,...prev];});
 
-  // SÉQUENCEUR — append-only sur race.log (ne touche jamais au live)
-  const [showSequenceur,setShowSequenceur]=useState(false);
-  const addLogEvent=(evt)=>patchRace(r=>({...r,log:[...(r.log||[]),evt]}));
-  const deleteLogEvent=(id)=>patchRace(r=>({...r,log:(r.log||[]).filter(e=>e.id!==id)}));
-  const addLap=(lapObj)=>patchRace(r=>({...r,laps:[...(r.laps||[]),lapObj]}));
-  const popLap=()=>patchRace(r=>({...r,laps:(r.laps||[]).slice(0,-1)}));
-  const setRaceOrigin=(o)=>patchRace(r=>({...r,origin:o}));
-
-  // EXPORT / IMPORT JSON — la base de données du projet
+  // EXPORT / IMPORT — données propres (aucune donnée tactique)
+  const slug=()=>(event.name||'points-race-live').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'points-race-live';
   const exportAll=()=>{
-    const payload={app:'RaceEngine',schema:SCHEMA_VERSION,version:APP_VERSION,exportedAt:new Date().toISOString(),
-      athletes:buildAthleteBase(events),
+    const payload={app:'PointsRaceLive',schema:SCHEMA_VERSION,version:APP_VERSION,exportedAt:new Date().toISOString(),
       events:events.map(ev=>({...ev,races:ev.races.map(r=>{
         if(r.module==='points'){
-          const st=buildRaceConfig(r.config||defaultPointsConfig());
-          const log=buildEventLog(ev.roster,r);
-          const pointOrder=st.sprints.map(s=>({label:s.label,isFinal:!!s.isFinal}));
-          const rk=computeRanking(ev.roster,effectiveSprintResults(ev.roster,r,st),r.live?.lapChanges||{});
-          const keys=new Set();log.forEach(e=>(e.positions||[]).forEach(p=>{if(p.athleteKey)keys.add(p.athleteKey);}));
-          const features={};
-          keys.forEach(key=>{const f=extractFeatures(log,key,pointOrder);if(f){const sk=ev.roster.find(s=>nameKey(s)===key);f.name=sk?sk.name:key;f.bib=sk?sk.bib:null;features[key]=f;}});
-          return {...r,origin:r.origin||'auto',video:r.video||null,laps:r.laps||[],points:buildPoints(ev.roster,r,st),log,result:rk.map(x=>({rank:x.rank,bib:x.bib,name:x.name,club:x.club,nat:x.nat,cat:x.cat,points:x.points,laps:x.laps,status:x.status||null})),features};
+          const rk=computeRanking(ev.roster,(r.live?.sprintResults||[]),r.live?.lapChanges||{});
+          return {...r,result:rk.map(x=>({rank:x.rank,bib:x.bib,name:x.name,club:x.club,nat:x.nat,cat:x.cat,points:x.points,laps:x.laps,status:x.status||null}))};
         }
         return r;
       })}))};
-    const slug=(event.name||'race-engine').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
-    downloadJSON(`${slug||'race-engine'}-${new Date().toISOString().slice(0,10)}.json`,payload);
+    downloadFile(`${slug()}-${today()}.json`,JSON.stringify(payload,null,2),'application/json');
     showToast('Export JSON généré','gain');
+  };
+  const exportCSV=()=>{
+    const rk=computeRanking(skaters,liveSprint,lapChanges);
+    const head='rang,dossard,nom,club,nat,categorie,points,tours,statut';
+    const rows=rk.map(x=>[x.rank,x.bib,`"${(x.name||'').replace(/"/g,'""')}"`,`"${(x.club||'').replace(/"/g,'""')}"`,x.nat,x.cat,x.points,x.laps,x.status||''].join(','));
+    downloadFile(`${slug()}-classement-${today()}.csv`,[head,...rows].join('\n'),'text/csv');
+    showToast('Classement CSV généré','gain');
   };
   const importAll=(parsed)=>{
     if(!parsed||!Array.isArray(parsed.events)||!parsed.events.length){showToast('Fichier JSON invalide','loss');return;}
@@ -576,19 +376,18 @@ function App(){
       id:e.id||rid(),name:e.name||'Événement',date:e.date||today(),location:e.location||'',
       roster:Array.isArray(e.roster)?e.roster.map((s,i)=>({id:s.id||i+1,bib:Number(s.bib)||0,name:s.name||`Coureur ${s.bib||i+1}`,club:s.club||'',nat:(s.nat||'FRA').toUpperCase(),cat:s.cat||'Senior',status:s.status||null})):[],
       roles:e.roles&&typeof e.roles==='object'?e.roles:{},
-      races:(Array.isArray(e.races)&&e.races.length?e.races:[makeRace('points')]).map(r=>({id:r.id||rid(),module:r.module||'points',label:r.label||'Course',config:r.config||defaultPointsConfig(),origin:r.origin||'auto',live:{sprintResults:Array.isArray(r.live?.sprintResults)?r.live.sprintResults:[],lapChanges:r.live?.lapChanges||{}},laps:Array.isArray(r.laps)?r.laps:[],log:Array.isArray(r.log)?r.log:[],video:r.video||null}))
+      races:(Array.isArray(e.races)&&e.races.length?e.races:[makeRace('points')]).map(r=>({id:r.id||rid(),module:r.module||'points',label:r.label||'Course',config:r.config||defaultPointsConfig(),live:{sprintResults:Array.isArray(r.live?.sprintResults)?r.live.sprintResults:[],lapChanges:r.live?.lapChanges||{}}}))
     }));
     setEvents(evs);setActiveEventId(evs[0].id);setActiveRaceId(evs[0].races[0].id);setActiveSprintIdx(0);setLastSprintId(null);
     showToast(`${evs.length} événement(s) importé(s)`,'gain');
   };
 
   const structure=useMemo(()=>mod.id==='points'?buildRaceConfig(config):{sprints:[]},[mod.id,config]);
-  const effSprint=useMemo(()=>mod.id==='points'?effectiveSprintResults(skaters,race,structure):[],[skaters,race,structure,mod.id]); // fusion live+correction+vidéo
-  const sprintResults=effSprint; // les vues de lecture utilisent les points effectifs
-  const ranking=useMemo(()=>computeRanking(skaters,effSprint,lapChanges),[skaters,effSprint,lapChanges]);
-  const prevRanking=useMemo(()=>{if(lastSprintId==null)return null;const w=effSprint.filter(s=>s.sprintId!==lastSprintId);if(w.length===effSprint.length)return null;return computeRanking(skaters,w,lapChanges);},[skaters,effSprint,lapChanges,lastSprintId]);
+  const sprintResults=liveSprint; // le live est l'unique source de vérité
+  const ranking=useMemo(()=>computeRanking(skaters,sprintResults,lapChanges),[skaters,sprintResults,lapChanges]);
+  const prevRanking=useMemo(()=>{if(lastSprintId==null)return null;const w=sprintResults.filter(s=>s.sprintId!==lastSprintId);if(w.length===sprintResults.length)return null;return computeRanking(skaters,w,lapChanges);},[skaters,sprintResults,lapChanges,lastSprintId]);
   const rankingWithMove=useMemo(()=>{if(!prevRanking)return ranking.map(r=>({...r,move:0}));const map={};prevRanking.forEach(p=>{map[p.id]=p.rank;});return ranking.map(r=>({...r,move:map[r.id]!=null?map[r.id]-r.rank:0}));},[ranking,prevRanking]);
-  const pointsInfo=useMemo(()=>{const rec=new Set(effSprint.map(s=>s.sprintId));let total=0,maxSolo=0;structure.sprints.forEach(sp=>{if(rec.has(sp.id))return;total+=sp.isFinal?6:3;maxSolo+=sp.isFinal?3:2;});return {total,maxSolo,remaining:structure.sprints.length-effSprint.length};},[structure,effSprint]);
+  const pointsInfo=useMemo(()=>{const rec=new Set(sprintResults.map(s=>s.sprintId));let total=0,maxSolo=0;structure.sprints.forEach(sp=>{if(rec.has(sp.id))return;total+=sp.isFinal?6:3;maxSolo+=sp.isFinal?3:2;});return {total,maxSolo,remaining:structure.sprints.length-sprintResults.length};},[structure,sprintResults]);
   const teamRanking=useMemo(()=>computeTeamRanking(ranking),[ranking]);
   const pointsById=useMemo(()=>{const m={};ranking.forEach(r=>{m[r.id]=r.points;});return m;},[ranking]);
   const rankById=useMemo(()=>{const m={};ranking.forEach(r=>{m[r.id]=r.rank;});return m;},[ranking]);
@@ -609,17 +408,10 @@ function App(){
       </header>
 
       <main className="flex-1 overflow-y-auto">
-        {tab==='event' && <EventScreen {...{event,updateEventMeta,race,mod,addRace,selectRace,renameRace,deleteRace,duplicateRace,config,onCat,onDisc,setCircuitLength,setTotalDistance,resetRace,structure,createEvent,events,selectEvent,deleteEvent,duplicateEvent,exportAll,importAll,onOpenSequenceur:()=>setShowSequenceur(true)}} />}
+        {tab==='event' && <EventScreen {...{event,updateEventMeta,race,mod,addRace,selectRace,renameRace,deleteRace,duplicateRace,config,onCat,onDisc,setCircuitLength,setTotalDistance,resetRace,structure,createEvent,events,selectEvent,deleteEvent,duplicateEvent,exportAll,exportCSV,importAll}} />}
         {tab==='coureurs' && <CoureursScreen {...{skaters,roles,assignRole,assignRoleClub,setShowImport,roleCounts}} />}
-        {tab==='saisie' && (mod.operational
-          ? <PointsInput {...{structure,activeSprint,activeSprintIdx,setActiveSprintIdx,skaters,roles,sprintResults:liveSprint,updateSprint,lapChanges,setLap,setStatus,pointsInfo,pointsById,rankById}} />
-          : <ModuleSoon mod={mod} />)}
-        {tab==='classement' && (mod.operational
-          ? <PointsBoard {...{ranking:rankingWithMove,teamRanking,roles,pointsInfo}} />
-          : <ModuleSoon mod={mod} />)}
-        {tab==='analyse' && (mod.operational
-          ? <AnalyseScreen {...{skaters,sprintResults,structure,roles,ranking}} />
-          : <ModuleSoon mod={mod} />)}
+        {tab==='saisie' && <PointsInput {...{structure,activeSprint,activeSprintIdx,setActiveSprintIdx,skaters,roles,sprintResults:liveSprint,updateSprint,lapChanges,setLap,setStatus,pointsInfo,pointsById,rankById}} />}
+        {tab==='classement' && <PointsBoard {...{ranking:rankingWithMove,teamRanking,roles,pointsInfo,exportCSV}} />}
       </main>
 
       {toast && (
@@ -628,8 +420,8 @@ function App(){
         </div>
       )}
 
-      <nav className="safe-bottom bg-black border-t border-zinc-800 grid grid-cols-5 shrink-0">
-        {[{id:'event',label:'ÉVÉN.',icon:'📅'},{id:'coureurs',label:'COUR.',icon:'👥'},{id:'saisie',label:'SAISIE',icon:'⏱'},{id:'classement',label:'CLASST',icon:'🏆'},{id:'analyse',label:'DÉBRIEF',icon:'📋'}].map(t=>(
+      <nav className="safe-bottom bg-black border-t border-zinc-800 grid grid-cols-4 shrink-0">
+        {[{id:'event',label:'COURSE',icon:'📅'},{id:'coureurs',label:'COUR.',icon:'👥'},{id:'saisie',label:'SAISIE',icon:'⏱'},{id:'classement',label:'CLASST',icon:'🏆'}].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} className={`py-3 flex flex-col items-center gap-0.5 ${tab===t.id?'text-red-500':'text-zinc-500'}`}>
             <span className="text-base leading-none">{t.icon}</span><span className="text-[8px] tracking-wider">{t.label}</span>
           </button>
@@ -638,12 +430,11 @@ function App(){
 
       {showSwitcher && <Switcher {...{events,event,race,selectEvent,selectRace,createEvent,addRace,onClose:()=>setShowSwitcher(false),setTab}} />}
       {showImport && <ImportModal onClose={()=>setShowImport(false)} onImport={importSkaters} />}
-      {showSequenceur && <Sequenceur {...{race,structure,skaters,roles,pointsById,rankById,addLogEvent,deleteLogEvent,addLap,popLap,setRaceOrigin,onClose:()=>setShowSequenceur(false)}} />}
     </div>
   );
 }
 
-// Sélecteur rapide événement / course (depuis le header)
+// Sélecteur rapide événement / course
 function Switcher({events,event,race,selectEvent,selectRace,createEvent,addRace,onClose,setTab}){
   return (
     <div className="fixed inset-0 bg-black/85 z-50 flex items-end justify-center" onClick={onClose}>
@@ -659,7 +450,7 @@ function Switcher({events,event,race,selectEvent,selectRace,createEvent,addRace,
                 <div className="border-t border-zinc-800 p-1 space-y-px">
                   {ev.races.map(r=>{const m=MODULES.find(x=>x.id===r.module)||{};return (
                     <button key={r.id} onClick={()=>{selectRace(r.id);onClose();setTab('saisie');}} className={`w-full flex items-center gap-2 px-2 py-2 text-left text-sm ${r.id===race.id?'bg-red-950/30 text-red-300':'text-zinc-300'}`}>
-                      <span>{m.icon}</span><span className="flex-1 truncate">{r.label}</span>{!m.operational&&<span className="text-[9px] text-zinc-600">à venir</span>}
+                      <span>{m.icon}</span><span className="flex-1 truncate">{r.label}</span>
                     </button>);})}
                   <div className="flex flex-wrap gap-1 p-1">
                     {MODULES.map(m=><button key={m.id} onClick={()=>addRace(m.id)} className="px-2 py-1 border border-zinc-800 text-zinc-400 text-[10px]">+ {m.icon} {m.label}</button>)}
@@ -675,14 +466,10 @@ function Switcher({events,event,race,selectEvent,selectRace,createEvent,addRace,
   );
 }
 
-function ModuleSoon({mod}){
-  return <div className="p-6 text-center text-zinc-500"><div className="text-4xl mb-2">{mod.icon}</div><div className="text-lg font-bold text-zinc-300">{mod.label}</div><div className="text-sm mt-2">Module à venir. L'ossature est prête à l'accueillir : il réutilisera la même base coureurs, les mêmes rôles et le même historique.</div></div>;
-}
-
 // ============================================================
-// ÉCRAN COURSE (réglages + sauvegarde + historique)
+// ÉCRAN COURSE (réglages + transfert + historique)
 // ============================================================
-function EventScreen({event,updateEventMeta,race,mod,addRace,selectRace,renameRace,deleteRace,duplicateRace,config,onCat,onDisc,setCircuitLength,setTotalDistance,resetRace,structure,createEvent,events,selectEvent,deleteEvent,duplicateEvent,exportAll,importAll,onOpenSequenceur}){
+function EventScreen({event,updateEventMeta,race,mod,addRace,selectRace,renameRace,deleteRace,duplicateRace,config,onCat,onDisc,setCircuitLength,setTotalDistance,resetRace,structure,createEvent,events,selectEvent,deleteEvent,duplicateEvent,exportAll,exportCSV,importAll}){
   const upd=(k,v)=>updateEventMeta({[k]:v});
   const onImportFile=(e)=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{importAll(JSON.parse(r.result));}catch(err){alert('Fichier illisible: '+err.message);}};r.readAsText(f);e.target.value='';};
   return (
@@ -696,14 +483,15 @@ function EventScreen({event,updateEventMeta,race,mod,addRace,selectRace,renameRa
       </Block>
 
       <Block title="Transfert / Archivage des données">
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={exportAll} className="py-3 border border-emerald-700 bg-emerald-950/20 text-emerald-300 text-sm font-bold uppercase tracking-wider">📤 Exporter</button>
-          <label className="py-3 border border-zinc-700 text-zinc-300 text-sm font-bold uppercase tracking-wider text-center cursor-pointer flex items-center justify-center">
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={exportAll} className="py-3 border border-emerald-700 bg-emerald-950/20 text-emerald-300 text-xs font-bold uppercase tracking-wider">📤 JSON</button>
+          <button onClick={exportCSV} className="py-3 border border-zinc-700 text-zinc-300 text-xs font-bold uppercase tracking-wider">📊 CSV</button>
+          <label className="py-3 border border-zinc-700 text-zinc-300 text-xs font-bold uppercase tracking-wider text-center cursor-pointer flex items-center justify-center">
             📥 Importer
             <input type="file" accept="application/json,.json" onChange={onImportFile} className="hidden" />
           </label>
         </div>
-        <div className="text-[10px] text-zinc-500">Archive complète au format JSON : tous les événements, courses, coureurs, rôles, points et chronologie. Sert à changer d'appareil, partager avec un coach, archiver une saison et alimenter l'analyse. <span className="text-zinc-600">≠ l'import de starting list (onglet Coureurs).</span> ⚠️ Importer une archive remplace toutes les données.</div>
+        <div className="text-[10px] text-zinc-500">JSON = archive complète (événements, courses, coureurs, rôles, points, classements). CSV = classement de la course active. <span className="text-zinc-600">≠ l'import de starting list (onglet Coureurs).</span> ⚠️ Importer un JSON remplace toutes les données.</div>
       </Block>
 
       <Block title={`Courses de l'événement · ${event.races.length}`}>
@@ -714,7 +502,7 @@ function EventScreen({event,updateEventMeta,race,mod,addRace,selectRace,renameRa
         <div className="grid grid-cols-2 gap-1">
           {MODULES.map(m=>(
             <button key={m.id} onClick={()=>addRace(m.id)} className={`py-2 text-xs border flex items-center justify-center gap-1 ${m.operational?'border-zinc-700 text-zinc-300':'border-zinc-800 text-zinc-500'}`}>
-              <span>{m.icon}</span><span>{m.label}{!m.operational&&' (à venir)'}</span>
+              <span>{m.icon}</span><span>{m.label}</span>
             </button>
           ))}
         </div>
@@ -735,8 +523,6 @@ function EventScreen({event,updateEventMeta,race,mod,addRace,selectRace,renameRa
           </div>
           {structure.warnings.map((w,i)=><div key={i} className="border-l-2 border-amber-500 bg-amber-950/30 p-2 text-xs text-amber-200">⚠ {w}</div>)}
           <button onClick={()=>{if(confirm('Réinitialiser les résultats de cette course ?'))resetRace();}} className="w-full py-2 border border-zinc-700 text-zinc-500 text-xs uppercase tracking-wider">Réinitialiser les résultats</button>
-          <button onClick={onOpenSequenceur} className="w-full py-3 mt-1 border border-zinc-700 bg-zinc-900 text-zinc-200 text-sm font-bold uppercase tracking-wider">🎬 Séquencer cette course</button>
-          <div className="text-[10px] text-zinc-600">Analyse tactique post-course (chrono + tags). N'affecte jamais les points ni le classement.</div>
         </Block>
       )}
 
@@ -772,7 +558,7 @@ function RaceRow({r,active,onSelect,onRename,onDuplicate,onDelete,canDelete}){
       ):(
         <button onClick={onSelect} className="flex-1 min-w-0 text-left">
           <div className="text-sm truncate">{r.label}</div>
-          <div className="text-[10px] text-zinc-500">{m.label}{!m.operational&&' · à venir'}{active?' · active':' · charger'}</div>
+          <div className="text-[10px] text-zinc-500">{m.label}{active?' · active':' · charger'}</div>
         </button>
       )}
       <button onClick={()=>setEdit(e=>!e)} title="Renommer" className="px-1.5 py-1 border border-zinc-700 text-zinc-400 text-xs">✏️</button>
@@ -783,12 +569,11 @@ function RaceRow({r,active,onSelect,onRename,onDuplicate,onDelete,canDelete}){
 }
 
 // ============================================================
-// ÉCRAN COUREURS (consolidé : import + roster + rôles)
-// Source unique des statuts.
+// ÉCRAN COUREURS (import + roster + rôles coachés / adversaires)
 // ============================================================
 function CoureursScreen({skaters,roles,assignRole,assignRoleClub,setShowImport,roleCounts}){
   const [q,setQ]=useState('');
-  const [filter,setFilter]=useState('all'); // all | mine | rivals | rest
+  const [filter,setFilter]=useState('all');
   const [teamOpen,setTeamOpen]=useState(false);
 
   let list=q?searchSkaters(skaters,q):skaters.slice();
@@ -856,7 +641,7 @@ function CoureursScreen({skaters,roles,assignRole,assignRoleClub,setShowImport,r
 function Counter({icon,label,n}){return <div className="border border-zinc-800 py-1.5"><div className="text-base leading-none">{icon}</div><div className="text-lg font-bold leading-tight">{n}</div><div className="text-[8px] text-zinc-500 uppercase">{label}</div></div>;}
 
 // ============================================================
-// MODULE POINTS — Saisie
+// SAISIE — Course à points
 // ============================================================
 function PointsInput({structure,activeSprint,activeSprintIdx,setActiveSprintIdx,skaters,roles,sprintResults,updateSprint,lapChanges,setLap,setStatus,pointsInfo,pointsById,rankById}){
   const [lapsOpen,setLapsOpen]=useState(false);
@@ -909,8 +694,8 @@ function Lb({on,c,onClick,children}){const cls=on?{red:'border-red-500 bg-red-50
 
 function FastSprintInput({sprint,skaters,roles,pointsById,rankById,existing,onChange,onAdvance}){
   const baseSlots=sprint.isFinal?3:2;
-  const ptsFor=(i)=>pointsForPosition(i+1,sprint.isFinal);
-  const init=()=>{if(existing){const arr=existing.positions.slice();while(arr.length<baseSlots)arr.push(null);return arr;}return Array(baseSlots).fill(null);};
+  const ptOf=(i)=>pointsForPosition(i+1,sprint.isFinal);
+  const init=()=>{const n=existing?Math.max(baseSlots,existing.positions.length):baseSlots;return Array.from({length:n},(_,i)=>existing?(existing.positions[i]||null):null);};
   const [picks,setPicks]=useState(init);
   const [openSlot,setOpenSlot]=useState(0);
   const [query,setQuery]=useState('');
@@ -918,28 +703,32 @@ function FastSprintInput({sprint,skaters,roles,pointsById,rankById,existing,onCh
   const excludeIds=picks.filter((p,i)=>p&&i!==openSlot);
   const candidates=useMemo(()=>orderedCandidates(skaters,roles,pointsById,rankById||{},query,excludeIds).slice(0,60),[skaters,roles,pointsById,rankById,query,picks,openSlot]);
   const selectSkater=(id)=>{
-    const baseWasComplete=picks.slice(0,baseSlots).every(Boolean);
+    const scoringComplete=picks.slice(0,baseSlots).every(Boolean);
     const c=[...picks];c[openSlot]=id;setPicks(c);onChange(c);setQuery('');
-    const baseNowComplete=c.slice(0,baseSlots).every(Boolean);
+    const nowScoring=c.slice(0,baseSlots).every(Boolean);
     let next=-1;for(let i=0;i<c.length;i++){if(!c[i]){next=i;break;}}
-    setOpenSlot(next);
-    if(baseNowComplete && !baseWasComplete && !sprint.isFinal)onAdvance();
+    if(next!==-1){setOpenSlot(next);}
+    else{setOpenSlot(null);if(nowScoring&&!scoringComplete)onAdvance();}
   };
-  const clearSlot=(i)=>{let c;if(i>=baseSlots){c=picks.filter((_,j)=>j!==i);}else{c=[...picks];c[i]=null;}setPicks(c);onChange(c);setQuery('');setOpenSlot(i>=c.length?null:i);};
-  const addExtra=()=>{const c=[...picks,null];setPicks(c);setOpenSlot(c.length-1);setQuery('');};
+  const clearSlot=(i)=>{const c=[...picks];c[i]=null;setPicks(c);onChange(c);setQuery('');setOpenSlot(i);};
+  const addFinisher=()=>{const c=[...picks,null];setPicks(c);setOpenSlot(c.length-1);setQuery('');};
+  const removeLast=()=>{if(picks.length<=baseSlots)return;const c=picks.slice(0,-1);setPicks(c);onChange(c);setQuery('');if(openSlot!=null&&openSlot>=c.length)setOpenSlot(null);};
   return (
     <div>
       <div className="space-y-1.5">
-        {picks.map((id,i)=>{const sk=skaters.find(s=>s.id===id);const isOpen=i===openSlot;const extra=i>=baseSlots;return (
-          <div key={i} onClick={()=>{setOpenSlot(isOpen?null:i);setQuery('');}} className={`flex items-center gap-2 px-2 py-3 border ${isOpen?'border-red-500 bg-red-500/10':sk?(extra?'border-zinc-800 bg-zinc-900/50':'border-zinc-700 bg-zinc-900'):'border-zinc-800'}`}>
+        {picks.map((id,i)=>{const sk=skaters.find(s=>s.id===id);const isOpen=i===openSlot;const p=ptOf(i);return (
+          <div key={i} onClick={()=>{setOpenSlot(isOpen?null:i);setQuery('');}} className={`flex items-center gap-2 px-2 py-3 border ${isOpen?'border-red-500 bg-red-500/10':sk?(p>0?'border-zinc-700 bg-zinc-900':'border-zinc-800 bg-zinc-900/40'):'border-zinc-800'}`}>
             <span className="w-9 text-center shrink-0"><span className="block text-[8px] text-zinc-500 leading-none">P°</span><span className="text-xl font-bold leading-none">{i+1}</span></span>
-            {sk?(<span className="flex-1 min-w-0"><span className="flex items-baseline gap-2"><span className="font-bold text-red-500 text-lg">{sk.bib}</span><span className="text-sm truncate">{sk.name}</span></span><span className="text-[10px] truncate block" style={{color:clubColor(sk.club)}}>{clubShort(sk.club)}</span></span>):(<span className="flex-1 text-sm text-zinc-500">{isOpen?'▾ choisis un coureur':extra?'départage (0 pt)':'appuie pour choisir'}</span>)}
-            <span className={`font-bold shrink-0 ${ptsFor(i)>0?'text-red-500':'text-zinc-600'}`}>+{ptsFor(i)}</span>
+            {sk?(<span className="flex-1 min-w-0"><span className="flex items-baseline gap-2"><span className="font-bold text-red-500 text-lg">{sk.bib}</span><span className="text-sm truncate">{sk.name}</span></span><span className="text-[10px] truncate block" style={{color:clubColor(sk.club)}}>{clubShort(sk.club)}</span></span>):(<span className="flex-1 text-sm text-zinc-500">{isOpen?'▾ choisis un coureur':p>0?'appuie pour choisir':'finisher de départage'}</span>)}
+            {p>0?<span className="text-red-500 font-bold shrink-0">+{p}</span>:<span className="text-[9px] text-zinc-500 uppercase tracking-wider shrink-0 text-right leading-tight">0 pt<br/>départage</span>}
             {sk && <button onClick={(e)=>{e.stopPropagation();clearSlot(i);}} className="text-zinc-500 active:text-red-500 px-2 shrink-0 text-lg">✕</button>}
           </div>);})}
       </div>
-      {sprint.isFinal && picks.slice(0,baseSlots).every(Boolean) && (
-        <button onClick={addExtra} className="w-full mt-1.5 py-2 border border-zinc-800 text-zinc-500 text-[11px] uppercase tracking-wider">+ Ajouter un finisher (départage, 0 pt)</button>
+      {sprint.isFinal && (
+        <div className="flex gap-1 mt-1.5">
+          <button onClick={addFinisher} className="flex-1 py-2 border border-zinc-700 text-zinc-300 text-xs uppercase tracking-wider active:bg-zinc-800">+ Finisher (départage · 0 pt)</button>
+          {picks.length>baseSlots && <button onClick={removeLast} className="px-3 py-2 border border-zinc-800 text-zinc-500 text-xs">− Retirer</button>}
+        </div>
       )}
       {openSlot!=null && (
         <div className="mt-2 border border-zinc-700 bg-black">
@@ -957,20 +746,15 @@ function FastSprintInput({sprint,skaters,roles,pointsById,rankById,existing,onCh
           </div>
         </div>
       )}
-      <div className="mt-2 text-center text-[10px] text-zinc-600">{sprint.isFinal?'Podium 3-2-1. Ajoute des finishers (0 pt) pour départager les ex æquo.':'P1 + P2 remplis → enregistré + point suivant auto. Flèches ← → pour corriger.'}</div>
+      <div className="mt-2 text-center text-[10px] text-zinc-600">{sprint.isFinal?"Podium 3-2-1, puis ajoute des finishers (0 pt) pour départager une égalité à l'arrivée.":'P1 + P2 remplis → enregistré + point suivant auto.'} Flèches ← → pour corriger.</div>
     </div>
   );
 }
 
 // ============================================================
-// MODULE POINTS — Classement
+// CLASSEMENT — individuel + équipes
 // ============================================================
-// ============================================================
-// ============================================================
-// TIMELINE DES PRISES DE POINTS — lecture tactique immédiate
-// 🔴 3 pts · 🟡 2 pts · 🔵 1 pt (arrivée 3-2-1)
-// ============================================================
-function PointsBoard({ranking,teamRanking,roles,pointsInfo}){
+function PointsBoard({ranking,teamRanking,roles,pointsInfo,exportCSV}){
   const [view,setView]=useState('indiv');
   return (
     <div className="p-4">
@@ -980,11 +764,11 @@ function PointsBoard({ranking,teamRanking,roles,pointsInfo}){
       </div>
       <div className="flex justify-between items-center text-[10px] text-zinc-500 mb-2 px-1">
         <span>{pointsInfo.remaining} point{pointsInfo.remaining>1?'s':''} restant{pointsInfo.remaining>1?'s':''}</span>
-        <span><span className="text-zinc-300 font-bold">{pointsInfo.total}</span> pts à distribuer · max <span className="text-zinc-300 font-bold">{pointsInfo.maxSolo}</span>/coureur</span>
+        <button onClick={exportCSV} className="px-2 py-1 border border-zinc-800 text-zinc-400 uppercase tracking-wider">📊 Export CSV</button>
       </div>
       {view==='indiv'&&(
         <div className="space-y-px">
-          <div className="text-[9px] text-zinc-600 uppercase mb-1">Tours › Pts › Dernier point › Arrivée</div>
+          <div className="text-[9px] text-zinc-600 uppercase mb-1">Tours › Points › Égalité = meilleure place à l'arrivée</div>
           {ranking.map((r,i)=>{const leader=i===0&&!r.statusVoid;return (
             <div key={r.id} className={`flex items-center gap-2 py-2 px-2 border-l-2 ${leader?'border-red-500 bg-red-950/30':i<3&&!r.statusVoid?'border-zinc-500 bg-zinc-900/50':r.statusVoid?'border-zinc-800 opacity-40':r.lappedOut?'border-amber-700 bg-amber-950/20':'border-zinc-800'}`}>
               <div className={`w-6 text-right font-bold ${leader?'text-red-500':'text-zinc-400'}`}>{r.rank}</div>
@@ -1015,306 +799,14 @@ function PointsBoard({ranking,teamRanking,roles,pointsInfo}){
 }
 
 // ============================================================
-// IMPORT MODAL
+// IMPORT MODAL (texte local + saisie manuelle — aucune API, aucun coût)
 // ============================================================
-// ============================================================
-// ============================================================
-// ANALYSE IMMÉDIATE POST-COURSE (lecture seule)
-// Timeline compacte + frise des prises de points (top 3 + coachés).
-// Ne modifie aucun calcul, aucune feature, aucune donnée.
-// ============================================================
-function CompactTimeline({skaters,sprintResults,structure,roles}){
-  const byId={};skaters.forEach(s=>byId[s.id]=s);
-  const resById={};sprintResults.forEach(r=>resById[r.sprintId]=r);
-  const surname=(s)=>s?s.name.split(' ')[0]:'?';
-  return (
-    <div className="space-y-0.5" style={{fontFamily:'ui-monospace,monospace'}}>
-      {structure.sprints.map(sp=>{const res=resById[sp.id];const isFinal=!!sp.isFinal;const label=isFinal?'ARR':'T'+sp.label;
-        if(!res||!res.positions.length)return <div key={sp.id} className="text-[11px] leading-snug"><span className="text-zinc-500 font-bold">{label}</span> <span className="text-zinc-700">: —</span></div>;
-        return <div key={sp.id} className="text-[11px] leading-snug">
-          <span className={`font-bold ${isFinal?'text-red-500':'text-zinc-400'}`}>{label}</span><span className="text-zinc-600"> : </span>
-          {res.positions.map((id,idx)=>{const pts=pointsForPosition(idx+1,isFinal);const s=byId[id];const role=s&&getRole(roles,s);return <span key={idx}>{idx>0?<span className="text-zinc-600"> / </span>:null}{role?ROLE_ICON[role]:''}<span className="text-zinc-200">{surname(s)}</span> <span className="text-red-400">+{pts}</span></span>;})}
-        </div>;
-      })}
-    </div>
-  );
-}
-
-function PointsFrise({skaters,sprintResults,structure,roles,ranking}){
-  const cols=structure.sprints;
-  const ptsMap={};
-  sprintResults.forEach(sp=>{const f=!!sp.isFinal;sp.positions.forEach((id,idx)=>{(ptsMap[id]=ptsMap[id]||{})[sp.sprintId]=pointsForPosition(idx+1,f);});});
-  const top3=ranking.filter(r=>!r.statusVoid).slice(0,3);
-  const coached=ranking.filter(r=>getRole(roles,r)==='mine');
-  const seen={},rows=[];[...top3,...coached].forEach(r=>{if(!seen[r.id]){seen[r.id]=1;rows.push(r);}});
-  if(!rows.length)return <div className="text-sm text-zinc-500 text-center py-4">—</div>;
-  const K=cols.filter(c=>!c.isFinal).length||1;
-  const b1=Math.ceil(K/3),b2=Math.ceil(2*K/3);
-  const div=(i)=> (i===b1||i===b2||!!cols[i].isFinal);
-  const gridCols=`repeat(${cols.length}, 1fr)`;
-  return (
-    <div style={{fontFamily:'ui-monospace,monospace'}}>
-      <div className="grid mb-1 pb-1 border-b border-zinc-800" style={{gridTemplateColumns:gridCols}}>
-        {cols.map((c,i)=><div key={c.id} className={`text-center text-[8px] leading-none ${c.isFinal?'text-red-500 font-bold':'text-zinc-500'} ${div(i)?'border-l border-zinc-800':''}`}>{c.isFinal?'AR':c.label}</div>)}
-      </div>
-      {rows.map(r=>(
-        <div key={r.id} className="mb-2">
-          <div className="text-[11px] flex items-center gap-1 truncate">{getRole(roles,r)&&<span>{ROLE_ICON[getRole(roles,r)]}</span>}<span className="font-bold text-red-500">{r.bib}</span><span className="truncate">{r.name}</span><span className="text-zinc-500 shrink-0">· {r.points} pts</span></div>
-          <div className="grid" style={{gridTemplateColumns:gridCols}}>
-            {cols.map((c,i)=>{const p=(ptsMap[r.id]||{})[c.id];return <div key={c.id} className={`text-center text-[11px] leading-tight ${div(i)?'border-l border-zinc-800':''} ${p?(c.isFinal?'text-red-400 font-bold':'text-zinc-100 font-bold'):'text-zinc-700'}`}>{p||'·'}</div>;})}
-          </div>
-        </div>
-      ))}
-      <div className="text-[9px] text-zinc-600 mt-1">Top 3 + tes ⭐ · tiers début | milieu | fin · valeur = points pris (AR = arrivée 3/2/1).</div>
-    </div>
-  );
-}
-
-function AnalyseScreen({skaters,sprintResults,structure,roles,ranking}){
-  if(!sprintResults.length)return <div className="p-4 text-sm text-zinc-500 text-center py-10">Aucun point saisi. Le débrief apparaîtra ici dès les premiers points.</div>;
-  const top10=ranking.slice(0,10);
-  return (
-    <div className="p-4 space-y-6">
-      <div>
-        <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">Classement final · Top 10</div>
-        <div className="space-y-px">
-          {top10.map(r=>(<div key={r.id} className="flex items-center gap-2 text-xs py-1 border-b border-zinc-900"><span className="w-5 text-right text-zinc-400">{r.rank}</span>{getRole(roles,r)&&<span>{ROLE_ICON[getRole(roles,r)]}</span>}<span className="font-bold text-red-500 w-9 text-center">{r.bib}</span><span className="flex-1 truncate">{r.name}</span>{r.laps!==0&&<span className={r.laps>0?'text-emerald-400':'text-red-400'}>{r.laps>0?'+':''}{r.laps}T</span>}<span className="font-bold">{r.points}</span></div>))}
-        </div>
-      </div>
-      <div><div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">Timeline de course</div><CompactTimeline skaters={skaters} sprintResults={sprintResults} structure={structure} roles={roles} /></div>
-      <div><div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">Frise des prises de points</div><PointsFrise skaters={skaters} sprintResults={sprintResults} structure={structure} roles={roles} ranking={ranking} /></div>
-      <div className="h-4" />
-    </div>
-  );
-}
-
-
-// ============================================================
-// SÉQUENCEUR MVP — chrono + tours + tags d'actions (append-only)
-// Lit race.log, AJOUTE des événements source:'sequencer'. Ne touche jamais au live.
-// ============================================================
-function SeqPicker({skaters,roles,pointsById,rankById,onPick,exclude}){
-  const [q,setQ]=useState('');
-  const list=useMemo(()=>orderedCandidates(skaters,roles,pointsById,rankById||{},q,exclude||[]).slice(0,40),[skaters,roles,pointsById,rankById,q,exclude]);
-  return (
-    <div className="border border-zinc-700 bg-black">
-      <input autoFocus value={q} onChange={e=>setQ(e.target.value)} inputMode="numeric" placeholder="dossard / nom…" className="w-full bg-zinc-900 border-b border-zinc-800 px-2 py-2 text-sm outline-none focus:border-red-500" />
-      <div className="max-h-48 overflow-y-auto">
-        {list.map(s=>{const role=getRole(roles,s);return (
-          <button key={s.id} onClick={()=>onPick(s)} className="w-full flex items-center gap-2 px-2 py-2 active:bg-zinc-800 border-b border-zinc-900 text-left text-sm">
-            <span className="w-5 text-center">{role?ROLE_ICON[role]:''}</span>
-            <span className="font-bold text-red-500 w-9">{s.bib}</span>
-            <span className="flex-1 truncate">{s.name}</span>
-          </button>);})}
-        {!list.length && <div className="px-2 py-3 text-zinc-600 text-xs">Aucun coureur.</div>}
-      </div>
-    </div>
-  );
-}
-
-function TagRow({label,options,value,onChange}){
-  return (
-    <div>
-      <div className="text-[9px] text-zinc-500 uppercase tracking-wider mb-0.5">{label}</div>
-      <div className="flex flex-wrap gap-1">
-        {options.map(([v,l])=><button key={v} onClick={()=>onChange(value===v?null:v)} className={`px-2 py-1 text-[11px] border ${value===v?'border-red-500 bg-red-500/20 text-red-300':'border-zinc-800 text-zinc-400'}`}>{l}</button>)}
-      </div>
-    </div>
-  );
-}
-
-function Sequenceur({race,structure,skaters,roles,pointsById,rankById,addLogEvent,deleteLogEvent,addLap,popLap,setRaceOrigin,onClose}){
-  const keyToSkater={};skaters.forEach(s=>{keyToSkater[nameKey(s)]=s;});
-  const [running,setRunning]=useState(false);
-  const [elapsed,setElapsed]=useState(0);
-  const startRef=useRef(0);const [,setTick]=useState(0);
-  useEffect(()=>{if(!running)return;startRef.current=Date.now()-elapsed*1000;const id=setInterval(()=>setTick(t=>t+1),200);return ()=>clearInterval(id);},[running]);
-  const cur=()=>running?(Date.now()-startRef.current)/1000:elapsed;
-  const fmt=(s)=>{s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');};
-  const laps=race.laps||[];const curLap=laps.length+1;
-  const tour=()=>{const c=cur();const prev=laps.length?laps[laps.length-1].cumTime:0;addLap({lap:laps.length+1,lapTime:Math.round((c-prev)*10)/10,cumTime:Math.round(c*10)/10});};
-
-  const mode=effectiveMode(race); // 'live' | 'video'
-  const points=useMemo(()=>buildPoints(skaters,race,structure),[skaters,race,structure]);
-  const ctxKey=(sid,k)=>sid+'|'+k;
-  const ctxMap={};(race.log||[]).filter(e=>e.type==='POINT_CONTEXT'&&e.ref).forEach(e=>{ctxMap[ctxKey(e.ref.sprintId,e.ref.athleteKey)]=e;});
-  const lapToLabel={};structure.sprints.forEach((sp,index)=>{lapToLabel[structure.neutralizedLaps+index*structure.frequency]=sp.isFinal?'ARR':'P'+sp.label;});
-
-  const [m,setM]=useState('home'); // home | move | enrich | pointentry
-  const [showLaps,setShowLaps]=useState(false);
-  const [moveId,setMoveId]=useState(null);const [frozen,setFrozen]=useState({videoTime:0,lap:0});
-  const [actor,setActor]=useState(null);const [target,setTarget]=useState(null);const [pick,setPick]=useState(null);
-  const [outcome,setOutcome]=useState(null);const [mcost,setMcost]=useState(null);const [note,setNote]=useState('');
-  const [enrich,setEnrich]=useState(null);const [etags,setEtags]=useState({});
-  const [pe,setPe]=useState(null); // {intent:'creation'|'correction', sprintId, isFinal, label, slots:[athlete|null]}
-  const reset=()=>{setM('home');setMoveId(null);setActor(null);setTarget(null);setPick(null);setOutcome(null);setMcost(null);setNote('');setEnrich(null);setEtags({});setPe(null);};
-  const needsTarget=(id)=>(SEQ_MOVES.find(x=>x[0]===id)||[])[2];
-
-  const startMove=(id)=>{setFrozen({videoTime:cur(),lap:curLap});setMoveId(id);setActor(null);setTarget(null);setOutcome(null);setMcost(null);setNote('');setPick('actor');setM('move');};
-  const saveMove=()=>{if(!actor){setPick('actor');return;}addLogEvent({id:rid(),seq:Date.now(),source:'sequencer',type:'MOVE',move:moveId,actorKey:nameKey(actor),actorBib:actor.bib,targetKey:target?nameKey(target):null,targetBib:target?target.bib:null,outcome,videoTime:Math.round(frozen.videoTime*10)/10,lap:frozen.lap,cost:mcost?Number(mcost):null,note:note.trim()});reset();};
-  const incident=(type)=>{setFrozen({videoTime:cur(),lap:curLap});setMoveId(type);setActor(null);setNote('');setPick(type==='CHUTE'?'actor':null);setM('move');};
-
-  const startEnrich=(p,pos)=>{const ex=ctxMap[ctxKey(p.sprintId,pos.athleteKey)];setEnrich({sprintId:p.sprintId,athleteKey:pos.athleteKey,label:p.label,isFinal:p.isFinal,bib:pos.bib,name:pos.name,value:pos.value,lap:p.lap});setEtags(ex?{...ex.tags}:{});setM('enrich');};
-  const saveEnrich=()=>{if(!enrich)return;const ex=ctxMap[ctxKey(enrich.sprintId,enrich.athleteKey)];if(ex)deleteLogEvent(ex.id);addLogEvent({id:rid(),seq:Date.now(),source:'sequencer',type:'POINT_CONTEXT',ref:{sprintId:enrich.sprintId,athleteKey:enrich.athleteKey},videoTime:Math.round(cur()*10)/10,lap:enrich.lap,tags:{...etags}});reset();};
-
-  const startPointEntry=(intent,sp)=>{const slots=Array((sp&&sp.isFinal)?3:2).fill(null);setPe({intent,sprintId:sp?sp.id:null,isFinal:sp?!!sp.isFinal:false,label:sp?sp.label:'',slots});setPick(null);setM('pointentry');};
-  const peChooseSprint=(sp)=>{setPe(p=>({...p,sprintId:sp.id,isFinal:!!sp.isFinal,label:sp.label,slots:Array(sp.isFinal?3:2).fill(null)}));};
-  const savePointEntry=()=>{
-    if(!pe||!pe.sprintId)return;
-    const positions=pe.slots.map((a,i)=>a?{rank:i+1,athleteKey:nameKey(a),bib:a.bib,name:a.name,value:pointsForPosition(i+1,pe.isFinal)}:null).filter(Boolean);
-    if(!positions.length)return;
-    const index=structure.sprints.findIndex(s=>s.id===pe.sprintId);
-    const lap=structure.neutralizedLaps+index*structure.frequency;
-    if(pe.intent==='creation'){addLogEvent({id:rid(),seq:Date.now(),source:'sequencer',type:'POINT',sprintId:pe.sprintId,positions,videoTime:Math.round(cur()*10)/10,lap});}
-    else{addLogEvent({id:rid(),seq:Date.now(),source:'sequencer',type:'POINT_CORRECTION',provenance:'sequencer',sprintId:pe.sprintId,positions,videoTime:Math.round(cur()*10)/10,lap});}
-    reset();
-  };
-
-  const seqEvents=(race.log||[]).filter(e=>e.source==='sequencer'&&e.type!=='POINT_CONTEXT').slice().sort((a,b)=>(a.videoTime||0)-(b.videoTime||0));
-  const evLabel=(e)=>e.type==='MOVE'?moveLabel(e.move):e.type==='CHUTE'?'Chute':e.type==='NOTE'?'Note':e.type==='POINT'?'Point (vidéo)':e.type==='POINT_CORRECTION'?'Point (corr.)':e.type;
-
-  return (
-    <div className="fixed inset-0 bg-zinc-950 z-50 flex flex-col safe-top">
-      <header className="bg-black border-b border-zinc-800 px-3 py-2 flex items-center justify-between shrink-0">
-        <div className="min-w-0"><div className="text-[9px] tracking-[0.25em] text-red-500 uppercase">🎬 Séquenceur</div><div className="text-sm font-bold truncate">{race.label}</div></div>
-        <button onClick={onClose} className="px-3 py-2 border border-zinc-700 text-zinc-300 text-xs uppercase tracking-wider">Fermer</button>
-      </header>
-
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {/* bandeau mode */}
-        <div className={`border p-2 ${mode==='video'?'border-orange-800 bg-orange-950/15':'border-zinc-800 bg-zinc-900/40'}`}>
-          <div className="flex items-center justify-between">
-            <div className="text-xs"><span className="text-zinc-500 uppercase text-[9px]">Mode</span> <span className={`font-bold ${mode==='video'?'text-orange-300':'text-zinc-200'}`}>{mode==='video'?'VIDÉO — création des points':'LIVE — enrichir / corriger'}</span></div>
-          </div>
-          <div className="flex gap-1 mt-1">
-            {[['auto','Auto'],['live','Live'],['video','Vidéo']].map(([v,l])=><button key={v} onClick={()=>setRaceOrigin(v)} className={`flex-1 py-1 text-[10px] border ${(race.origin||'auto')===v?'border-red-500 bg-red-500/10 text-red-400':'border-zinc-800 text-zinc-500'}`}>{l}</button>)}
-          </div>
-        </div>
-
-        {/* chrono + tours */}
-        <div className="border border-zinc-800 p-3">
-          <div className="text-center text-5xl font-bold tabular-nums" style={{fontFamily:'ui-monospace,monospace'}}>{fmt(cur())}</div>
-          <div className="grid grid-cols-3 gap-1 mt-2">
-            <button onClick={()=>setRunning(true)} disabled={running} className="py-2 border border-emerald-700 text-emerald-300 disabled:opacity-30 text-sm uppercase">Start</button>
-            <button onClick={()=>{setElapsed(cur());setRunning(false);}} disabled={!running} className="py-2 border border-amber-700 text-amber-300 disabled:opacity-30 text-sm uppercase">Pause</button>
-            <button onClick={()=>{if(confirm('Chrono à zéro ? (les tours restent)')){setRunning(false);setElapsed(0);}}} className="py-2 border border-zinc-700 text-zinc-400 text-sm uppercase">Reset</button>
-          </div>
-          <div className="flex items-center justify-center gap-3 mt-3">
-            <button onClick={()=>{if(laps.length)popLap();}} className="w-12 h-11 border border-zinc-700 text-zinc-300 text-lg">−</button>
-            <div className="text-center w-28"><div className="text-[9px] text-zinc-500 uppercase">Tour en cours</div><div className="text-2xl font-bold">{curLap}</div><div className="text-[9px] text-zinc-600">{laps.length} enreg.{laps.length?` · ${laps[laps.length-1].lapTime}s`:''}</div></div>
-            <button onClick={tour} className="w-16 h-11 border border-red-700 bg-red-950/30 text-red-300 text-sm font-bold uppercase">+ Tour</button>
-          </div>
-          <button onClick={()=>setShowLaps(v=>!v)} className="w-full mt-2 py-1.5 border border-zinc-800 text-zinc-400 text-[10px] uppercase tracking-wider">{showLaps?'Masquer':'Voir'} les temps au tour</button>
-          {showLaps && (<div className="mt-1 max-h-40 overflow-y-auto border border-zinc-800" style={{fontFamily:'ui-monospace,monospace'}}>{!laps.length&&<div className="px-2 py-2 text-zinc-600 text-xs">Aucun tour.</div>}{laps.map(l=>(<div key={l.lap} className="flex items-center gap-2 px-2 py-1 text-[11px] border-b border-zinc-900"><span className="text-zinc-400 w-12">Tour {l.lap}</span><span className="text-zinc-100 font-bold w-14">{l.lapTime}s</span><span className="text-zinc-600 w-14">{fmt(l.cumTime)}</span>{lapToLabel[l.lap]&&<span className="text-red-400">{lapToLabel[l.lap]}</span>}</div>))}</div>)}
-        </div>
-
-        {m==='home' && (<>
-          <div>
-            <div className="flex items-center justify-between mb-1"><div className="text-[10px] text-zinc-500 uppercase tracking-wider">Points {mode==='video'?'(créés vidéo)':'à enrichir'}</div>{mode==='video'?<button onClick={()=>startPointEntry('creation',null)} className="px-2 py-1 border border-orange-700 text-orange-300 text-[10px] uppercase">+ Créer un point</button>:<button onClick={()=>startPointEntry('correction',null)} className="px-2 py-1 border border-amber-700 text-amber-300 text-[10px] uppercase">+ Point manquant</button>}</div>
-            {!points.length && <div className="text-xs text-zinc-600">{mode==='video'?'Aucun point créé. Utilise « Créer un point ».':'Aucun point live.'}</div>}
-            <div className="space-y-1">
-              {points.map(p=>(
-                <div key={p.sprintId} className="border border-zinc-800 p-1.5">
-                  <div className="text-[10px] text-zinc-500 mb-0.5 flex items-center gap-1"><span className={`font-bold ${p.isFinal?'text-red-500':'text-zinc-300'}`}>{p.isFinal?'ARR':'P'+p.label}</span><span>· T{p.lap}{p.videoTime!=null?` · ${fmt(p.videoTime)}`:''}{p.lapTime!=null?` · ${p.lapTime}s`:''}</span><span className={`ml-auto text-[8px] uppercase ${p.provenance==='live'?'text-zinc-600':p.isCorrection?'text-amber-500':'text-orange-400'}`}>{p.provenance==='live'?'live':p.isCorrection?'corrigé':'vidéo'}</span></div>
-                  {p.positions.map(pos=>{const done=!!ctxMap[ctxKey(p.sprintId,pos.athleteKey)];return (
-                    <div key={pos.rank} className="flex items-center gap-2 py-1 text-xs"><span className="font-bold text-red-500 w-9">{pos.bib}</span><span className="flex-1 truncate">{pos.name} <span className="text-zinc-500">+{pos.value}</span></span><button onClick={()=>startEnrich(p,pos)} className={`px-2 py-1 border text-[11px] ${done?'border-emerald-700 text-emerald-400':'border-zinc-700 text-zinc-300'}`}>{done?'✓':'Enrichir'}</button></div>);})}
-                  {mode==='live' && <button onClick={()=>{const sp=structure.sprints.find(s=>s.id===p.sprintId);startPointEntry('correction',sp);}} className="w-full mt-1 py-1 border border-zinc-800 text-zinc-500 text-[10px]">Corriger ce point</button>}
-                </div>))}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Move tactique</div>
-            <div className="grid grid-cols-2 gap-1">{SEQ_MOVES.map(([id,label])=><button key={id} onClick={()=>startMove(id)} className="py-3 border border-zinc-700 text-zinc-200 text-sm active:bg-zinc-800">{label}</button>)}</div>
-            <div className="grid grid-cols-2 gap-1 mt-1"><button onClick={()=>incident('CHUTE')} className="py-2 border border-zinc-800 text-zinc-400 text-xs">Chute</button><button onClick={()=>incident('NOTE')} className="py-2 border border-zinc-800 text-zinc-400 text-xs">Note</button></div>
-          </div>
-
-          <div>
-            <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Séquence · {seqEvents.length}</div>
-            <div className="space-y-px">{seqEvents.map(e=>(<div key={e.id} className="flex items-center gap-2 text-xs py-1.5 px-1 border-b border-zinc-900"><span className="text-zinc-500 tabular-nums w-10" style={{fontFamily:'ui-monospace,monospace'}}>{fmt(e.videoTime)}</span><span className="text-zinc-600 w-7">T{e.lap}</span><span className="text-zinc-200 w-24 truncate">{evLabel(e)}</span><span className="flex-1 truncate text-zinc-400">{e.type==='POINT'||e.type==='POINT_CORRECTION'?(e.positions||[]).map(p=>`${p.bib}+${p.value}`).join(' '):(e.actorBib||'')+(e.targetBib?`→${e.targetBib}`:'')+(e.outcome?` · ${(MOVE_OUTCOMES.find(o=>o[0]===e.outcome)||['',''])[1].toLowerCase()}`:'')+(e.note?` · ${e.note}`:'')}</span><button onClick={()=>deleteLogEvent(e.id)} className="text-zinc-600 px-1">🗑</button></div>))}{!seqEvents.length&&<div className="text-xs text-zinc-600">Rien de tagué.</div>}</div>
-          </div>
-        </>)}
-
-        {/* PANNEAU MOVE / INCIDENT */}
-        {m==='move' && (
-          <div className="border border-red-700 bg-red-950/10 p-3 space-y-2">
-            <div className="flex items-center justify-between"><div className="text-sm font-bold">{moveId==='CHUTE'?'Chute':moveId==='NOTE'?'Note':moveLabel(moveId)} <span className="text-zinc-500">· {fmt(frozen.videoTime)} · T{frozen.lap}</span></div><button onClick={reset} className="text-zinc-500 text-xs">Annuler</button></div>
-            {moveId!=='NOTE' && (actor?(<div className="flex items-center gap-2 px-2 py-2 border border-zinc-700 bg-zinc-900"><span className="text-[9px] text-zinc-500 uppercase">{moveId==='CHUTE'?'COUREUR':'ACTEUR'}</span><span className="font-bold text-red-500">{actor.bib}</span><span className="flex-1 truncate text-sm">{actor.name}</span><button onClick={()=>{setActor(null);setPick('actor');}} className="text-zinc-500 px-1">✕</button></div>):pick==='actor'?(<SeqPicker skaters={skaters} roles={roles} pointsById={pointsById} rankById={rankById} exclude={target?[target.id]:[]} onPick={(s)=>{setActor(s);setPick(null);}} />):<button onClick={()=>setPick('actor')} className="w-full py-2 border border-zinc-700 text-zinc-400 text-sm">+ Acteur</button>)}
-            {moveId!=='CHUTE'&&moveId!=='NOTE'&&needsTarget(moveId)&&(target?(<div className="flex items-center gap-2 px-2 py-2 border border-zinc-800 bg-zinc-900"><span className="text-[9px] text-zinc-500 uppercase">CIBLE</span><span className="font-bold text-red-500">{target.bib}</span><span className="flex-1 truncate text-sm">{target.name}</span><button onClick={()=>setTarget(null)} className="text-zinc-500 px-1">✕</button></div>):pick==='target'?(<SeqPicker skaters={skaters} roles={roles} pointsById={pointsById} rankById={rankById} exclude={actor?[actor.id]:[]} onPick={(s)=>{setTarget(s);setPick(null);}} />):<button onClick={()=>setPick('target')} className="w-full py-1.5 border border-zinc-800 text-zinc-500 text-xs">+ Cible</button>)}
-            {moveId!=='CHUTE'&&moveId!=='NOTE'&&<><TagRow label="Issue" options={MOVE_OUTCOMES} value={outcome} onChange={setOutcome} /><TagRow label="Coût (1-5)" options={TAG_VOCAB.cost} value={mcost} onChange={setMcost} /></>}
-            <input value={note} onChange={e=>setNote(e.target.value)} placeholder="note (optionnel)" className="w-full bg-black border border-zinc-700 px-2 py-2 text-sm outline-none focus:border-red-500" />
-            <button onClick={moveId==='CHUTE'||moveId==='NOTE'?()=>{addLogEvent({id:rid(),seq:Date.now(),source:'sequencer',type:moveId,actorKey:actor?nameKey(actor):null,actorBib:actor?actor.bib:null,videoTime:Math.round(frozen.videoTime*10)/10,lap:frozen.lap,note:note.trim()});reset();}:saveMove} className="w-full py-3 bg-red-600 active:bg-red-500 text-white text-sm font-bold uppercase tracking-wider">Enregistrer</button>
-          </div>
-        )}
-
-        {/* PANNEAU ENRICHISSEMENT */}
-        {m==='enrich' && enrich && (
-          <div className="border border-emerald-700 bg-emerald-950/10 p-3 space-y-2">
-            <div className="flex items-center justify-between"><div className="text-sm font-bold">Enrichir {enrich.isFinal?'ARR':'P'+enrich.label} · <span className="text-red-500">{enrich.bib}</span> {enrich.name} +{enrich.value}</div><button onClick={reset} className="text-zinc-500 text-xs">Annuler</button></div>
-            <TagRow label="Contexte" options={TAG_VOCAB.context} value={etags.context} onChange={v=>setEtags(t=>({...t,context:v}))} />
-            <TagRow label="Position avant le point" options={TAG_VOCAB.positionBefore} value={etags.positionBefore} onChange={v=>setEtags(t=>({...t,positionBefore:v}))} />
-            <TagRow label="Coût énergétique (1-5)" options={TAG_VOCAB.cost} value={etags.cost} onChange={v=>setEtags(t=>({...t,cost:v}))} />
-            <button onClick={saveEnrich} className="w-full py-3 bg-emerald-700 active:bg-emerald-600 text-white text-sm font-bold uppercase tracking-wider">Enregistrer le contexte</button>
-            <div className="text-[9px] text-zinc-600">Le score (qui / combien) n'est pas modifié. Enrichissement par coureur.</div>
-          </div>
-        )}
-
-        {/* PANNEAU CRÉATION / CORRECTION DE POINT */}
-        {m==='pointentry' && pe && (
-          <div className={`border p-3 space-y-2 ${pe.intent==='creation'?'border-orange-700 bg-orange-950/10':'border-amber-700 bg-amber-950/10'}`}>
-            <div className="flex items-center justify-between"><div className={`text-sm font-bold ${pe.intent==='creation'?'text-orange-300':'text-amber-300'}`}>{pe.intent==='creation'?'Créer un point (vidéo)':'Corriger / ajouter un point'}</div><button onClick={reset} className="text-zinc-500 text-xs">Annuler</button></div>
-            {!pe.sprintId?(<>
-              <div className="text-[9px] text-zinc-500 uppercase">Choisir le point</div>
-              <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">{structure.sprints.map(sp=><button key={sp.id} onClick={()=>peChooseSprint(sp)} className="px-2 py-1 text-[11px] border border-zinc-800 text-zinc-400">{sp.isFinal?'ARR':sp.label}</button>)}</div>
-            </>):(<>
-              <div className="text-xs">Point <span className="font-bold text-red-400">{pe.isFinal?'ARR':'P'+pe.label}</span> <button onClick={()=>setPe(p=>({...p,sprintId:null}))} className="text-zinc-500 text-[10px] underline ml-1">changer</button></div>
-              {pe.slots.map((a,i)=>(<div key={i} className="flex items-center gap-2">
-                <span className="w-10 text-center bg-zinc-900 border border-zinc-800 py-1.5 text-sm font-bold">P{i+1}</span>
-                {a?(<div className="flex-1 flex items-center gap-2 px-2 py-1.5 border border-zinc-700 bg-zinc-900"><span className="font-bold text-red-500">{a.bib}</span><span className="flex-1 truncate text-sm">{a.name}</span><span className="text-red-400 text-xs">+{pointsForPosition(i+1,pe.isFinal)}</span><button onClick={()=>setPe(p=>{const s=[...p.slots];s[i]=null;return{...p,slots:s};})} className="text-zinc-500 px-1">✕</button></div>):pick==='pe'+i?(<div className="flex-1"><SeqPicker skaters={skaters} roles={roles} pointsById={pointsById} rankById={rankById} exclude={pe.slots.filter(Boolean).map(x=>x.id)} onPick={(s)=>{setPe(p=>{const sl=[...p.slots];sl[i]=s;return{...p,slots:sl};});setPick(null);}} /></div>):(<button onClick={()=>setPick('pe'+i)} className="flex-1 py-1.5 border border-zinc-700 text-zinc-400 text-sm text-left px-2">choisir…</button>)}
-              </div>))}
-              <button onClick={savePointEntry} disabled={!pe.slots.some(Boolean)} className={`w-full py-3 disabled:opacity-40 text-white text-sm font-bold uppercase tracking-wider ${pe.intent==='creation'?'bg-orange-700 active:bg-orange-600':'bg-amber-700 active:bg-amber-600'}`}>{pe.intent==='creation'?'Créer ce point':'Enregistrer la correction'}</button>
-              <div className="text-[9px] text-zinc-600">{pe.intent==='creation'?'Point source vidéo (provenance sequencer).':'Correction explicite — l\'info live d\'origine est conservée.'}</div>
-            </>)}
-          </div>
-        )}
-
-        <div className="text-[9px] text-zinc-600 safe-bottom">Append-only · le live n'est jamais modifié. Live &gt; correction &gt; vidéo.</div>
-      </div>
-    </div>
-  );
-}
-
-
 function ImportModal({onClose,onImport}){
-  const [tab,setTab]=useState('photo');
-  const [loading,setLoading]=useState(false);
-  const [progress,setProgress]=useState('');
+  const [tab,setTab]=useState('paste');
   const [error,setError]=useState(null);
   const [preview,setPreview]=useState(null);
   const [text,setText]=useState('');
 
-  const fileToB64=(file)=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=()=>rej(new Error('lecture impossible'));r.readAsDataURL(file);});
-
-  // plusieurs fichiers (images et/ou PDF) traités comme UNE seule startlist
-  const doFiles=async(e)=>{
-    const files=Array.from(e.target.files||[]);if(!files.length)return;
-    setLoading(true);setError(null);setPreview(null);
-    const batches=[];const errs=[];
-    for(let i=0;i<files.length;i++){
-      const f=files[i];setProgress(`Analyse ${i+1}/${files.length} — ${f.name}`);
-      try{
-        const b64=await fileToB64(f);
-        const isPdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name);
-        const list=await importViaApi(isPdf?{pdfData:b64}:{imageData:b64,mediaType:f.type||'image/jpeg'});
-        batches.push(list);
-      }catch(err){errs.push(`${f.name}: ${err.message}`);}
-    }
-    setProgress('');
-    const merged=mergeRosters(batches);
-    if(!merged.length){setError(errs[0]||'Aucun coureur détecté sur les fichiers fournis.');}
-    else{setPreview(merged);if(errs.length)setError(`${errs.length} fichier(s) en erreur — le reste a été fusionné.`);}
-    setLoading(false);
-  };
   const doText=()=>{if(!text.trim())return;setError(null);setPreview(null);try{const list=parseLocalRoster(text);const merged=mergeRosters([list]);merged.length?setPreview(merged):setError('Aucun coureur reconnu. Vérifie que chaque ligne commence par un dossard.');}catch(err){setError(err.message);}};
 
   return (
@@ -1322,19 +814,13 @@ function ImportModal({onClose,onImport}){
       <div className="bg-zinc-950 border border-zinc-700 w-full sm:max-w-lg max-h-[90vh] overflow-y-auto safe-bottom">
         <div className="border-b border-zinc-800 px-4 py-3 flex justify-between items-center sticky top-0 bg-zinc-950"><h2 className="text-sm font-bold uppercase tracking-wider">Import starting list</h2><button onClick={onClose} className="text-zinc-500 active:text-red-500 text-xl px-2">✕</button></div>
         <div className="p-4">
-          <div className="flex gap-1 mb-4">{[['photo','📷 Photos / PDF (IA)'],['paste','📋 Texte (gratuit)'],['manual','✎ Manuel']].map(([id,lbl])=><button key={id} onClick={()=>{setTab(id);setPreview(null);setError(null);}} className={`flex-1 py-2 text-[11px] uppercase border ${tab===id?'border-red-500 text-red-400':'border-zinc-800 text-zinc-500'}`}>{lbl}</button>)}</div>
-          {tab==='photo'&&<div>
-            <p className="text-xs text-zinc-400 mb-3">Sélectionne <span className="text-zinc-200">une ou plusieurs</span> photos / captures / PDF. Tout est fusionné en une seule liste, doublons (même dossard) supprimés. <span className="text-zinc-500">(via IA Anthropic — nécessite la clé API)</span></p>
-            <input type="file" accept="image/*,application/pdf" multiple onChange={doFiles} disabled={loading} className="block w-full text-xs text-zinc-400 file:mr-3 file:py-2 file:px-4 file:border-0 file:bg-red-600 file:text-white file:text-xs file:uppercase" />
-            <p className="text-[10px] text-zinc-600 mt-2">Astuce : sélectionne les 3 captures (401-420, 421-440, 441-460) d'un coup → un seul roster.</p>
-          </div>}
+          <div className="flex gap-1 mb-4">{[['paste','📋 Texte (copier/coller)'],['manual','✎ Manuel']].map(([id,lbl])=><button key={id} onClick={()=>{setTab(id);setPreview(null);setError(null);}} className={`flex-1 py-2 text-[11px] uppercase border ${tab===id?'border-red-500 text-red-400':'border-zinc-800 text-zinc-500'}`}>{lbl}</button>)}</div>
           {tab==='paste'&&<div>
-            <p className="text-xs text-zinc-400 mb-2">Solution <span className="text-emerald-400">gratuite, sans clé API</span>. Sur iPhone : appui long sur ta capture → « Copier le texte » (Live Text) → colle ici → l'app structure le roster localement.</p>
+            <p className="text-xs text-zinc-400 mb-2">Sur iPhone : appui long sur ta capture de la starting list → « Copier le texte » (Live Text) → colle ici → l'app structure le roster localement. Une ligne par coureur, commençant par le dossard.</p>
             <textarea value={text} onChange={e=>setText(e.target.value)} rows={6} placeholder={"464 BEDDIAF Nolan SEH-MANAO\n449 ROCHER Matthis SEH-MANAO\n446 COLIN Louis SEH-ROLLER SPORTS SAINT-PIERRAIS"} className="w-full bg-black border border-zinc-700 p-3 text-xs outline-none focus:border-red-500" />
-            <button onClick={doText} disabled={!text.trim()} className="mt-2 w-full py-2 bg-red-600 active:bg-red-500 disabled:opacity-40 text-white text-xs uppercase tracking-wider">Structurer le texte (local)</button>
+            <button onClick={doText} disabled={!text.trim()} className="mt-2 w-full py-2 bg-red-600 active:bg-red-500 disabled:opacity-40 text-white text-xs uppercase tracking-wider">Structurer le texte</button>
           </div>}
           {tab==='manual'&&<ManualEntry onSave={onImport} />}
-          {loading&&<div className="mt-3 text-xs text-amber-400">{progress||'Analyse en cours…'}</div>}
           {error&&<div className="mt-3 text-xs text-amber-400 border border-amber-900 bg-amber-950/30 p-2">⚠ {error}</div>}
           {preview&&(
             <div className="mt-4 border border-emerald-700 bg-emerald-950/20 p-3">
