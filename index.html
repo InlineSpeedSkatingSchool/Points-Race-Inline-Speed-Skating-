@@ -98,7 +98,7 @@ function searchSkaters(skaters,q){
 const FLAG_MAP={FRA:'🇫🇷',ITA:'🇮🇹',KOR:'🇰🇷',COL:'🇨🇴',GER:'🇩🇪',BRA:'🇧🇷',JPN:'🇯🇵',BEL:'🇧🇪',NED:'🇳🇱',USA:'🇺🇸',ESP:'🇪🇸',CHI:'🇨🇱',ARG:'🇦🇷',CHN:'🇨🇳',TPE:'🇹🇼',ECU:'🇪🇨',VEN:'🇻🇪',MEX:'🇲🇽',AUS:'🇦🇺',NZL:'🇳🇿',POR:'🇵🇹',SUI:'🇨🇭',POL:'🇵🇱',CZE:'🇨🇿',SVK:'🇸🇰',DEN:'🇩🇰'};
 const flag=(c)=>FLAG_MAP[(c||'').toUpperCase()]||'🏁';
 function clubColor(club){if(!club)return '#52525b';let h=0;for(let i=0;i<club.length;i++)h=club.charCodeAt(i)+((h<<5)-h);return `hsl(${Math.abs(h)%360},65%,55%)`;}
-function clubShort(club){if(!club)return '—';return club.split(/[-–]/)[0].trim().split(/\s+/).slice(0,2).join(' ');}
+function clubShort(club){if(!club)return '—';return club.replace(/\s+/g,' ').trim();}
 
 // Identité athlète = nom normalisé (compatible international).
 function nameKey(s){return normalize(s.name);}
@@ -288,7 +288,7 @@ const MODULES=[
   {id:'points', label:'Course à points', icon:'🏁', operational:true},
 ];
 const moduleLabel=(id)=>(MODULES.find(m=>m.id===id)||{}).label||id;
-const APP_VERSION='PRL v1.2';
+const APP_VERSION='PRL v1.3';
 const SCHEMA_VERSION=1;
 
 const rid=()=>Math.random().toString(36).slice(2,9);
@@ -650,7 +650,7 @@ function CoureursScreen({skaters,roles,assignRole,assignRoleClub,setShowImport,r
               <span className="font-bold text-red-500 w-9 text-center text-sm">{s.bib}</span>
               <div className="flex-1 min-w-0">
                 <div className="text-sm truncate">{s.name}</div>
-                <div className="text-[10px] truncate" style={{color:clubColor(s.club)}}>{clubShort(s.club)}</div>
+                <div className="text-[10px] leading-tight" style={{color:clubColor(s.club)}}>{clubShort(s.club)}</div>
               </div>
               <span className="text-xs">{flag(s.nat)}</span>
             </div>
