@@ -193,8 +193,32 @@ const isNat=(t)=>{const u=(t||'').toUpperCase();return /^[A-Z]{3}$/.test(u)&&NAT
 const CAT_PREFIX=/\b((SE|JU|VE|CA|MI|BE|PO|DA)[HFG])\b/i;
 const CAT_WORD=/\b(seniors?|sen|juniors?|jun|cadets?|minimes?|espoirs?|veterans?|vet|masters?|youth|u1[0-9]|u2[0-9])\b/i;
 function catNorm(w){w=(w||'').toLowerCase();if(/^(se|sen|senior)/.test(w))return 'Senior';if(/^(ju|jun|junior)/.test(w))return 'Junior';if(/^(ve|vet|master)/.test(w))return 'Veteran';if(/(cadet|minime|youth|^ca|^mi|^be|^po|u1|u2|espoir)/.test(w))return 'Youth';return 'Senior';}
+// Reflow d'un tableau "une cellule par ligne" (copie Live Text d'un tableau FFRS :
+// Dos / Lic / Nom / Prénom / Club éclatés sur plusieurs lignes).
+const CLUB_PREFIX_LINE=/^(SE|JU|VE|CA|MI|BE|PO|DA)[HFG]\b\s*-?\s*(.*)$/i;
+function parseReflowTable(text){
+  const lines=text.split(/\r?\n/).map(l=>l.replace(/\u00a0/g,' ').trim()).filter(Boolean);
+  const isDossard=(l)=>/^\d{1,4}$/.test(l);
+  const recs=[];let cur=null;
+  lines.forEach(l=>{ if(isDossard(l)){if(cur)recs.push(cur);cur={bib:Number(l),lines:[]};} else if(cur){cur.lines.push(l);} });
+  if(cur)recs.push(cur);
+  return recs.map(r=>{
+    let cat='Senior',clubParts=[],nameParts=[],inClub=false;
+    r.lines.forEach(l=>{
+      const cm=l.match(CLUB_PREFIX_LINE);
+      if(cm&&!inClub){inClub=true;cat=catNorm(l.slice(0,3));if(cm[2])clubParts.push(cm[2]);return;}
+      if(inClub){clubParts.push(l);return;}
+      l.split(/\s+/).forEach(t=>{if(/^\d+$/.test(t))return;if(/[A-Za-zÀ-ÿ]/.test(t))nameParts.push(t);});
+    });
+    return {bib:r.bib,name:nameParts.join(' ').trim()||`Coureur ${r.bib}`,club:clubParts.join(' ').trim(),nat:'FRA',cat};
+  }).filter(r=>r.bib);
+}
+
 function parseLocalRoster(text){
   const out=[];
+  // Format "tableau éclaté" (copie Live Text d'un tableau) → reflow dédié
+  const _lines=text.split(/\r?\n/).map(l=>l.replace(/\u00a0/g,' ').trim()).filter(Boolean);
+  if(_lines.filter(l=>CLUB_PREFIX_LINE.test(l)).length>=3) return parseReflowTable(text);
   text.split(/\r?\n/).forEach(line=>{
     let raw=(line||'').replace(/\u00a0/g,' ').replace(/\t/g,'  ').trim();
     if(!raw)return;
@@ -264,7 +288,7 @@ const MODULES=[
   {id:'points', label:'Course à points', icon:'🏁', operational:true},
 ];
 const moduleLabel=(id)=>(MODULES.find(m=>m.id===id)||{}).label||id;
-const APP_VERSION='PRL v1.1';
+const APP_VERSION='PRL v1.2';
 const SCHEMA_VERSION=1;
 
 const rid=()=>Math.random().toString(36).slice(2,9);
