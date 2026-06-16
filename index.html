@@ -586,7 +586,7 @@ function CoureursScreen({skaters,roles,assignRole,assignRoleClub,setShowImport,r
 
   return (
     <div className="p-4 space-y-3">
-      <button onClick={()=>setShowImport(true)} className="w-full py-2.5 bg-red-600 active:bg-red-500 text-white text-sm font-bold uppercase tracking-wider">↓ Importer une starting list</button>
+      <button onClick={()=>setShowImport(true)} className="w-full py-2.5 bg-red-600 active:bg-red-500 text-white text-sm font-bold uppercase tracking-wider">📷 Importer une starting list</button>
 
       <div className="grid grid-cols-3 gap-1 text-center">
         <Counter icon="⭐" label="Mes coureurs" n={roleCounts.mine} />
@@ -812,13 +812,21 @@ function ImportModal({onClose,onImport}){
   return (
     <div className="fixed inset-0 bg-black/85 z-50 flex items-end sm:items-center justify-center">
       <div className="bg-zinc-950 border border-zinc-700 w-full sm:max-w-lg max-h-[90vh] overflow-y-auto safe-bottom">
-        <div className="border-b border-zinc-800 px-4 py-3 flex justify-between items-center sticky top-0 bg-zinc-950"><h2 className="text-sm font-bold uppercase tracking-wider">Import starting list</h2><button onClick={onClose} className="text-zinc-500 active:text-red-500 text-xl px-2">✕</button></div>
+        <div className="border-b border-zinc-800 px-4 py-3 flex justify-between items-center sticky top-0 bg-zinc-950"><h2 className="text-sm font-bold uppercase tracking-wider">📷 Importer une starting list</h2><button onClick={onClose} className="text-zinc-500 active:text-red-500 text-xl px-2">✕</button></div>
         <div className="p-4">
-          <div className="flex gap-1 mb-4">{[['paste','📋 Texte (copier/coller)'],['manual','✎ Manuel']].map(([id,lbl])=><button key={id} onClick={()=>{setTab(id);setPreview(null);setError(null);}} className={`flex-1 py-2 text-[11px] uppercase border ${tab===id?'border-red-500 text-red-400':'border-zinc-800 text-zinc-500'}`}>{lbl}</button>)}</div>
+          <div className="flex gap-1 mb-4">{[['paste','📷 Depuis une capture'],['manual','✎ Manuel']].map(([id,lbl])=><button key={id} onClick={()=>{setTab(id);setPreview(null);setError(null);}} className={`flex-1 py-2 text-[11px] uppercase border ${tab===id?'border-red-500 text-red-400':'border-zinc-800 text-zinc-500'}`}>{lbl}</button>)}</div>
           {tab==='paste'&&<div>
-            <p className="text-xs text-zinc-400 mb-2">Sur iPhone : appui long sur ta capture de la starting list → « Copier le texte » (Live Text) → colle ici → l'app structure le roster localement. Une ligne par coureur, commençant par le dossard.</p>
+            <div className="border border-zinc-700 bg-zinc-900/60 p-3 mb-3">
+              <div className="text-[10px] text-red-400 uppercase tracking-[0.2em] mb-2">Depuis une capture de site / appli</div>
+              <ol className="text-sm text-zinc-200 space-y-2 list-none">
+                <li className="flex gap-2"><span className="font-bold text-red-500 shrink-0">1.</span><span>Fais une <b>capture d'écran</b> de la starting list (site fédé, appli résultats…).</span></li>
+                <li className="flex gap-2"><span className="font-bold text-red-500 shrink-0">2.</span><span>Ouvre la capture, <b>appui long</b> sur le texte → <b>« Tout sélectionner »</b> → <b>« Copier »</b> <span className="text-zinc-500">(texte en direct / Live Text)</span>.</span></li>
+                <li className="flex gap-2"><span className="font-bold text-red-500 shrink-0">3.</span><span><b>Colle</b> ci-dessous, puis <b>Structurer</b>. L'app reconstruit la liste — tu vérifies avant de valider.</span></li>
+              </ol>
+            </div>
+            <p className="text-[11px] text-zinc-500 mb-1">Une ligne par coureur, commençant par le dossard. Plusieurs captures ? Colle-les à la suite, les doublons sont fusionnés.</p>
             <textarea value={text} onChange={e=>setText(e.target.value)} rows={6} placeholder={"464 BEDDIAF Nolan SEH-MANAO\n449 ROCHER Matthis SEH-MANAO\n446 COLIN Louis SEH-ROLLER SPORTS SAINT-PIERRAIS"} className="w-full bg-black border border-zinc-700 p-3 text-xs outline-none focus:border-red-500" />
-            <button onClick={doText} disabled={!text.trim()} className="mt-2 w-full py-2 bg-red-600 active:bg-red-500 disabled:opacity-40 text-white text-xs uppercase tracking-wider">Structurer le texte</button>
+            <button onClick={doText} disabled={!text.trim()} className="mt-2 w-full py-2.5 bg-red-600 active:bg-red-500 disabled:opacity-40 text-white text-sm font-bold uppercase tracking-wider">Structurer la liste</button>
           </div>}
           {tab==='manual'&&<ManualEntry onSave={onImport} />}
           {error&&<div className="mt-3 text-xs text-amber-400 border border-amber-900 bg-amber-950/30 p-2">⚠ {error}</div>}
