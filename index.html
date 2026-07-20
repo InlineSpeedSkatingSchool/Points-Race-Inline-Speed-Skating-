@@ -94,8 +94,18 @@ function searchSkaters(skaters,q){
   if(/^\d+$/.test(t)){const ex=skaters.find(s=>String(s.bib)===t);if(ex)return[ex,...skaters.filter(s=>s!==ex&&String(s.bib).startsWith(t))];return skaters.filter(s=>String(s.bib).startsWith(t));}
   const nq=normalize(t);return skaters.map(s=>({s,sc:scoreMatch(s,nq)})).filter(x=>x.sc>0).sort((a,b)=>b.sc-a.sc).map(x=>x.s);
 }
-const FLAG_MAP={FRA:'🇫🇷',ITA:'🇮🇹',KOR:'🇰🇷',COL:'🇨🇴',GER:'🇩🇪',BRA:'🇧🇷',JPN:'🇯🇵',BEL:'🇧🇪',NED:'🇳🇱',USA:'🇺🇸',ESP:'🇪🇸',CHI:'🇨🇱',ARG:'🇦🇷',CHN:'🇨🇳',TPE:'🇹🇼',ECU:'🇪🇨',VEN:'🇻🇪',MEX:'🇲🇽',AUS:'🇦🇺',NZL:'🇳🇿',POR:'🇵🇹',SUI:'🇨🇭',POL:'🇵🇱',CZE:'🇨🇿',SVK:'🇸🇰',DEN:'🇩🇰'};
-const flag=(c)=>FLAG_MAP[(c||'').toUpperCase()]||'🏁';
+// Codes IOC → ISO-2 (le drapeau emoji est généré, donc couverture complète).
+const IOC_TO_ISO={
+FRA:'FR',ESP:'ES',ITA:'IT',GER:'DE',BEL:'BE',NED:'NL',POR:'PT',SUI:'CH',GBR:'GB',IRL:'IE',AUT:'AT',LUX:'LU',
+DEN:'DK',SWE:'SE',NOR:'NO',FIN:'FI',ISL:'IS',POL:'PL',CZE:'CZ',SVK:'SK',HUN:'HU',SLO:'SI',CRO:'HR',SRB:'RS',
+BIH:'BA',MNE:'ME',MKD:'MK',ALB:'AL',KOS:'XK',GRE:'GR',TUR:'TR',ROU:'RO',BUL:'BG',EST:'EE',LAT:'LV',LTU:'LT',
+UKR:'UA',BLR:'BY',RUS:'RU',MDA:'MD',GEO:'GE',ARM:'AM',AZE:'AZ',MLT:'MT',CYP:'CY',MON:'MC',SMR:'SM',AND:'AD',
+LIE:'LI',ISR:'IL',KAZ:'KZ',USA:'US',CAN:'CA',MEX:'MX',CUB:'CU',DOM:'DO',PUR:'PR',CRC:'CR',GUA:'GT',ESA:'SV',
+HON:'HN',NCA:'NI',PAN:'PA',COL:'CO',VEN:'VE',ECU:'EC',PER:'PE',BOL:'BO',CHI:'CL',ARG:'AR',URU:'UY',PAR:'PY',
+BRA:'BR',KOR:'KR',PRK:'KP',JPN:'JP',CHN:'CN',TPE:'TW',HKG:'HK',SGP:'SG',MAS:'MY',THA:'TH',INA:'ID',IND:'IN',
+PHI:'PH',VIE:'VN',AUS:'AU',NZL:'NZ',RSA:'ZA',NAM:'NA',EGY:'EG',MAR:'MA',ALG:'DZ',TUN:'TN',ANG:'AO',KEN:'KE',
+COD:'CD',CIV:'CI'};
+const flag=(c)=>{const iso=IOC_TO_ISO[(c||'').toUpperCase()];return iso?String.fromCodePoint(...[...iso].map(ch=>127397+ch.charCodeAt(0))):'🏁';};
 function clubColor(club){if(!club)return '#52525b';let h=0;for(let i=0;i<club.length;i++)h=club.charCodeAt(i)+((h<<5)-h);return `hsl(${Math.abs(h)%360},65%,55%)`;}
 function clubShort(club){if(!club)return '—';return club.replace(/\s+/g,' ').trim();}
 
@@ -174,13 +184,18 @@ const LS={get(k,fb){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f
 function mergeRosters(batches){
   const byBib=new Map();
   batches.flat().forEach(s=>{const b=Number(s.bib);if(!b)return;if(!byBib.has(b))byBib.set(b,s);else{const ex=byBib.get(b);if((!ex.club&&s.club)||(!ex.name&&s.name))byBib.set(b,{...ex,...s});}});
-  return Array.from(byBib.values()).sort((a,b)=>a.bib-b.bib).map((s,i)=>({id:i+1,bib:Number(s.bib),name:s.name||`Coureur ${s.bib}`,club:s.club||'',nat:(s.nat||'FRA').toUpperCase(),cat:s.cat||'Senior',status:null}));
+  return Array.from(byBib.values()).sort((a,b)=>a.bib-b.bib).map((s,i)=>({id:i+1,bib:Number(s.bib),name:s.name||`Coureur ${s.bib}`,club:s.club||'',nat:(s.nat||'').toUpperCase(),cat:s.cat||'Senior',status:null}));
 }
 
 // PARSEUR LOCAL GÉNÉRIQUE (sans IA) — FFRS, Europe, World Skate, OCR, copier-coller.
 const COUNTRY_NAMES={france:'FRA',espagne:'ESP',spain:'ESP',espana:'ESP',italie:'ITA',italy:'ITA',italia:'ITA',allemagne:'GER',germany:'GER',deutschland:'GER',belgique:'BEL',belgium:'BEL',belgie:'BEL',paysbas:'NED',netherlands:'NED',nederland:'NED',portugal:'POR',suisse:'SUI',switzerland:'SUI',schweiz:'SUI',colombie:'COL',colombia:'COL',bresil:'BRA',brazil:'BRA',brasil:'BRA',coree:'KOR',korea:'KOR',japon:'JPN',japan:'JPN',chine:'CHN',china:'CHN',taiwan:'TPE',taipei:'TPE',usa:'USA',etatsunis:'USA',argentine:'ARG',argentina:'ARG',mexique:'MEX',mexico:'MEX',chili:'CHI',chile:'CHI',equateur:'ECU',ecuador:'ECU',venezuela:'VEN',australie:'AUS',australia:'AUS',pologne:'POL',poland:'POL',danemark:'DEN',denmark:'DEN'};
-const NAT_CODES=new Set(('FRA ESP ITA GER BEL NED POR SUI GBR IRL USA CAN MEX COL CHI ARG BRA ECU VEN PER PAR URU BOL GUA CRC ESA HON NCA PAN DOM PUR CUB KOR PRK JPN CHN TPE HKG SGP MAS THA INA IND PHI VIE AUS NZL CZE SVK POL AUT HUN SLO CRO SRB DEN SWE NOR FIN EST LAT LTU RUS UKR BLR TUR GRE ROU BUL ISR KAZ RSA NAM EGY MAR ALG TUN ANG KEN COD CIV').split(/\s+/));
-const isNat=(t)=>{const u=(t||'').toUpperCase();return /^[A-Z]{3}$/.test(u)&&NAT_CODES.has(u);};
+const NAT_CODES=new Set(Object.keys(IOC_TO_ISO));
+// Codes trop proches de mots courants : refusés en détection "token isolé", acceptés entre parenthèses.
+const AMBIG_NAT=new Set(['AND','MON','CAN','PAR','PER','MAS','ANG','IND','SUI']);
+const isNat=(t)=>{const u=(t||'').toUpperCase();return /^[A-Z]{3}$/.test(u)&&NAT_CODES.has(u)&&!AMBIG_NAT.has(u);};
+const isNatStrict=(t)=>{const u=(t||'').toUpperCase();return /^[A-Z]{3}$/.test(u)&&NAT_CODES.has(u);};
+// Extrait une nationalité entre parenthèses/crochets : (AUT), [ESP]…
+const PAREN_NAT=/[（(\[]\s*([A-Za-z]{3})\s*[)）\]]/;
 const CAT_PREFIX=/\b((SE|JU|VE|CA|MI|BE|PO|DA)[HFG])\b/i;
 const CAT_WORD=/\b(seniors?|sen|juniors?|jun|cadets?|minimes?|espoirs?|veterans?|vet|masters?|youth|u1[0-9]|u2[0-9])\b/i;
 function catNorm(w){w=(w||'').toLowerCase();if(/^(se|sen|senior)/.test(w))return 'Senior';if(/^(ju|jun|junior)/.test(w))return 'Junior';if(/^(ve|vet|master)/.test(w))return 'Veteran';if(/(cadet|minime|youth|^ca|^mi|^be|^po|u1|u2|espoir)/.test(w))return 'Youth';return 'Senior';}
@@ -194,22 +209,24 @@ function parseReflowTable(text){
   lines.forEach(l=>{ if(isDossard(l)){if(cur)recs.push(cur);cur={bib:Number(l),lines:[]};} else if(cur){cur.lines.push(l);} });
   if(cur)recs.push(cur);
   return recs.map(r=>{
-    let cat='Senior',clubParts=[],nameParts=[],inClub=false;
+    let cat='Senior',clubParts=[],nameParts=[],inClub=false,nat=null;
     r.lines.forEach(l=>{
+      const pn=l.match(PAREN_NAT);
+      if(pn&&isNatStrict(pn[1])){nat=pn[1].toUpperCase();l=l.replace(pn[0],' ').trim();if(!l)return;}
+      if(!inClub&&isNatStrict(l)){nat=l.toUpperCase();return;}
       const cm=l.match(CLUB_PREFIX_LINE);
       if(cm&&!inClub){inClub=true;cat=catNorm(l.slice(0,3));if(cm[2])clubParts.push(cm[2]);return;}
       if(inClub){clubParts.push(l);return;}
       l.split(/\s+/).forEach(t=>{if(/^\d+$/.test(t))return;if(/[A-Za-zÀ-ÿ]/.test(t))nameParts.push(t);});
     });
-    return {bib:r.bib,name:nameParts.join(' ').trim()||`Coureur ${r.bib}`,club:clubParts.join(' ').trim(),nat:'FRA',cat};
+    return {bib:r.bib,name:nameParts.join(' ').trim()||`Coureur ${r.bib}`,club:clubParts.join(' ').trim(),nat,cat};
   }).filter(r=>r.bib);
 }
-
 function parseLocalRoster(text){
   const out=[];
   // Format "tableau éclaté" (copie Live Text d'un tableau) → reflow dédié
   const _lines=text.split(/\r?\n/).map(l=>l.replace(/\u00a0/g,' ').trim()).filter(Boolean);
-  if(_lines.filter(l=>CLUB_PREFIX_LINE.test(l)).length>=3) return parseReflowTable(text);
+  if(_lines.filter(l=>CLUB_PREFIX_LINE.test(l)).length>=3) return normalizeNats(parseReflowTable(text));
   text.split(/\r?\n/).forEach(line=>{
     let raw=(line||'').replace(/\u00a0/g,' ').replace(/\t/g,'  ').trim();
     if(!raw)return;
@@ -217,7 +234,14 @@ function parseLocalRoster(text){
     const bibM=raw.match(/(?:^|\D)(\d{1,4})(?:\D|$)/);
     if(!bibM)return;
     const bib=Number(bibM[1]);
-    let nat='FRA',cat='Senior';
+    let nat=null,cat='Senior';
+    // Format international "102 Anna Petutschnigg (AUT)" → tout le reste est le nom, pas de club
+    const pnat=raw.match(PAREN_NAT);
+    if(pnat&&isNatStrict(pnat[1])){
+      const nm=raw.replace(pnat[0],' ').replace(bibM[0],' ').replace(/\b\d{5,}\b/g,' ').replace(/\s{2,}/g,' ').trim();
+      out.push({bib,name:nm||`Coureur ${bib}`,club:'',nat:pnat[1].toUpperCase(),cat});
+      return;
+    }
     const grabNat=(tok)=>{const u=tok.toUpperCase();const fl=tok.toLowerCase().replace(/[^a-z]/g,'');if(isNat(u)){nat=u;return true;}if(COUNTRY_NAMES[fl]){nat=COUNTRY_NAMES[fl];return true;}return false;};
 
     let fields=raw.split(/ {2,}/).map(f=>f.trim()).filter(Boolean);
@@ -269,7 +293,13 @@ function parseLocalRoster(text){
       out.push({bib,name:name||`Coureur ${bib}`,club,nat,cat});
     }
   });
-  return out;
+  return normalizeNats(out);
+}
+// Si la liste contient au moins une nationalité explicite (liste internationale),
+// on ne force pas FRA sur les autres : drapeau neutre plutôt qu'un faux drapeau.
+function normalizeNats(list){
+  const anyNat=list.some(o=>o.nat);
+  return list.map(o=>({...o,nat:o.nat||(anyNat?'':'FRA')}));
 }
 
 // ============================================================
@@ -279,7 +309,7 @@ const MODULES=[
   {id:'points', label:'Course à points', icon:'🏁', operational:true},
 ];
 const moduleLabel=(id)=>(MODULES.find(m=>m.id===id)||{}).label||id;
-const APP_VERSION='PRL v1.6';
+const APP_VERSION='PRL v1.7';
 
 const rid=()=>Math.random().toString(36).slice(2,9);
 const today=()=>new Date().toISOString().slice(0,10);
@@ -594,7 +624,7 @@ function CoureursScreen({skaters,roles,assignRole,assignRoleClub,setShowImport,r
               <span className="font-bold text-red-500 w-9 text-center text-sm">{s.bib}</span>
               <div className="flex-1 min-w-0">
                 <div className="text-sm truncate">{s.name}</div>
-                <div className="text-[10px] leading-tight" style={{color:clubColor(s.club)}}>{clubShort(s.club)}</div>
+                <div className="text-[10px] leading-tight" style={{color:clubColor(s.club||s.nat)}}>{s.club?clubShort(s.club):(s.nat||'—')}</div>
               </div>
               <span className="text-xs">{flag(s.nat)}</span>
             </div>
@@ -782,7 +812,7 @@ function ImportModal({onClose,onImport}){
           {preview&&(
             <div className="mt-4 border border-emerald-700 bg-emerald-950/20 p-3">
               <div className="text-xs text-emerald-400 uppercase mb-2">✓ {preview.length} coureurs (doublons fusionnés)</div>
-              <div className="max-h-52 overflow-y-auto space-y-px text-xs">{preview.map(p=><div key={p.id} className="flex items-center gap-2 py-1"><span className="font-bold text-red-500 w-9">#{p.bib}</span><span className="flex-1 truncate">{p.name}</span><span className="truncate max-w-[90px]" style={{color:clubColor(p.club)}}>{clubShort(p.club)}</span><span>{flag(p.nat)}</span></div>)}</div>
+              <div className="max-h-52 overflow-y-auto space-y-px text-xs">{preview.map(p=><div key={p.id} className="flex items-center gap-2 py-1"><span className="font-bold text-red-500 w-9">#{p.bib}</span><span className="flex-1 truncate">{p.name}</span><span className="truncate max-w-[90px]" style={{color:clubColor(p.club||p.nat)}}>{p.club?clubShort(p.club):(p.nat||'—')}</span><span>{flag(p.nat)}</span></div>)}</div>
               <button onClick={()=>onImport(preview)} className="w-full mt-3 py-2 bg-red-600 active:bg-red-500 text-white text-xs uppercase tracking-wider">Importer ce roster</button>
             </div>
           )}
