@@ -37,10 +37,14 @@ const DISCIPLINES = ['Piste', 'Route'];
 
 function getSprintFrequency(c, d) { return (c === 'Youth' && d === 'Piste') ? 2 : 1; }
 function getOfficialDistance(c, d) { if (c === 'Youth') return 5000; return d === 'Piste' ? 5000 : 10000; }
-function computeNeutralizedLaps(circ) { let n = 1; while (n * circ < 999) n++; return n; }
+function computeNeutralizedLaps(circ, category, discipline) {
+  // Piste 200 m — Senior H/F et Junior : 1er point à 21 tours restants (4 tours neutralisés, 800 m)
+  if (circ === 200 && discipline === 'Piste' && category !== 'Youth') return 4;
+  let n = 1; while (n * circ < 999) n++; return n;
+}
 function buildRaceConfig({ category, discipline, totalDistance, circuitLength }) {
   const totalLaps = Math.round(totalDistance / circuitLength);
-  const neutralizedLaps = computeNeutralizedLaps(circuitLength);
+  const neutralizedLaps = computeNeutralizedLaps(circuitLength, category, discipline);
   const pointedLaps = totalLaps - neutralizedLaps;
   const frequency = getSprintFrequency(category, discipline);
   const sprints = [];
@@ -275,7 +279,7 @@ const MODULES=[
   {id:'points', label:'Course à points', icon:'🏁', operational:true},
 ];
 const moduleLabel=(id)=>(MODULES.find(m=>m.id===id)||{}).label||id;
-const APP_VERSION='PRL v1.4';
+const APP_VERSION='PRL v1.6';
 
 const rid=()=>Math.random().toString(36).slice(2,9);
 const today=()=>new Date().toISOString().slice(0,10);
@@ -297,10 +301,11 @@ function loadEvents(){
 // APP (shell)
 // ============================================================
 function App(){
-  const [tab,setTab]=useState('saisie'); // event | coureurs | saisie | classement
   const [events,setEvents]=useState(()=>loadEvents());
   const [activeEventId,setActiveEventId]=useState(()=>LS.get('prl_activeEventId',null));
   const [activeRaceId,setActiveRaceId]=useState(()=>LS.get('prl_activeRaceId',null));
+  // Ouverture intelligente : Saisie si une starting list est déjà chargée, sinon Course (début du parcours)
+  const [tab,setTab]=useState(()=>{const ev=events.find(e=>e.id===activeEventId)||events[0];return (ev&&ev.roster&&ev.roster.length>0)?'saisie':'event';});
   const [activeSprintIdx,setActiveSprintIdx]=useState(0);
   const [showImport,setShowImport]=useState(false);
   const [showSwitcher,setShowSwitcher]=useState(false);
